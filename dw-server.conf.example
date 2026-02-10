@@ -1,0 +1,35 @@
+#################################
+# Server's interface parameters #
+#################################
+[Interface]
+
+# The result of the `dw genkey` command
+PrivateKey = <private key>
+
+# Yours server IP address and net mask
+Address = 10.0.0.1/24
+
+# Maximum transmission unit
+# Do not change the value until you are sure
+MTU = 1420
+
+# Scripts to run before/after the interface is up/down
+PreUp =
+PostUp =
+PreDown =
+PostDown =
+
+##############
+# Peers list #
+##############
+[Peer]
+
+# Peer's public key, the result of the `dw pubkey <private peer key>` command
+PublicKey = <peer's public key>
+
+# IP addresses that peer can use
+AllowedIPs = 10.0.0.25/24
+
+[Peer]
+PublicKey = <peer's public key>
+AllowedIPs = 10.0.0.25/24

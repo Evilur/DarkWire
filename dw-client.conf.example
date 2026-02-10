@@ -1,0 +1,37 @@
+#################################
+# Client's interface parameters #
+#################################
+[Interface]
+
+# The result of the `dw genkey` command
+PrivateKey = <private key>
+
+# Yours peer IP address and net mask
+# Check with the server administrator
+Address = 10.0.0.25/24
+
+# Maximum transmission unit
+# Do not change the value until you are sure
+MTU = 1420
+
+# Scripts to run before/after the interface is up/down
+PreUp =
+PostUp =
+PreDown =
+PostDown =
+
+#######################
+# Server's parameters #
+#######################
+[Server]
+
+# The server's public key, result of `dw pubkey <server private key>` command
+# Check with the server administrator
+PublicKey = <server's public key>
+
+# Server's ip:port
+# Check with the server administrator
+Endpoint = 127.0.0.1:2500
+
+# All requests to the following IPs will be routed through a VPN
+RoutedIPs = 10.0.0.0/24
