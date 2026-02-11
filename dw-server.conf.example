@@ -27,8 +27,8 @@ PostDown =
 # Peer's public key, the result of the `dw pubkey <private peer key>` command
 PublicKey = <peer's public key>
 
-# IP addresses that peer can use
-AllowedIPs = 10.0.0.25/24
+# IP address of the peer
+IP = 10.0.0.25
 
 [Peer]
 PublicKey = <peer's public key>
