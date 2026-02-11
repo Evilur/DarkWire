@@ -16,15 +16,15 @@ INCLUDE_DIRECTORIES(src)
 
 # Build the client
 FILE(GLOB_RECURSE SOURCES "src/*.cpp")
-ADD_EXECUTABLE(DarkWire ${SOURCES})
+ADD_EXECUTABLE(dw ${SOURCES})
 
 # Build unit tests
 FILE(GLOB_RECURSE SOURCES "src/*.cpp" "test/*.cpp")
 LIST(FILTER SOURCES EXCLUDE REGEX ".*/src/main\\.cpp$")
-ADD_EXECUTABLE(Test ${SOURCES})
+ADD_EXECUTABLE(tests ${SOURCES})
 
 # Copy tests directory
-ADD_CUSTOM_COMMAND(TARGET Test POST_BUILD
+ADD_CUSTOM_COMMAND(TARGET tests POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-    ${CMAKE_SOURCE_DIR}/test/units $<TARGET_FILE_DIR:DarkWire>/test/units
+    ${CMAKE_SOURCE_DIR}/test/units $<TARGET_FILE_DIR:dw>/test/units
 )
