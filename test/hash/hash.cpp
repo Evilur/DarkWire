@@ -13,8 +13,8 @@ void hash_unit_test() {
         constexpr int c = 123;
         int d = 0;
         d = c;
-        std::cout << (Hash::Get(a) == Hash::Get(b)) << std::endl
-                  << (Hash::Get(c) == Hash::Get(d));
+        std::cout << (::hash(a) == ::hash(b)) << '\n'
+                  << (::hash(c) == ::hash(d));
     });
 
     test.Run("Reference", [] {
@@ -22,23 +22,23 @@ void hash_unit_test() {
         const int& b = a;
         int c = 123;
         int& d = c;
-        std::cout << (Hash::Get(a) == Hash::Get(b)) << std::endl
-                  << (Hash::Get(c) == Hash::Get(d));
+        std::cout << (::hash(a) == ::hash(b)) << '\n'
+                  << (::hash(c) == ::hash(d));
     });
 
     test.Run("Pointer", [] {
         const int a = 751;
         constexpr int b = 123;
-        std::cout << (Hash::Get(a) == Hash::Get(&a)) << std::endl
-                  << (Hash::Get(b) == Hash::Get(&b));
+        std::cout << (::hash(a) == ::hash(&a)) << '\n'
+                  << (::hash(b) == ::hash(&b));
     });
 
     test.Run("String", [] {
         constexpr const char* const a = "Test String";
         char b[1024];
         strcpy(b, "Test String");
-        std::cout << (Hash::Get(a) == Hash::Get((char*)b)) << std::endl
-                  << (Hash::Get("Test String") == Hash::Get("Test String"));
+        std::cout << (::hash(a) == ::hash((char*)b)) << '\n'
+                  << (::hash("Test String") == ::hash("Test String"));
     });
 
 }

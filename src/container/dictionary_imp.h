@@ -14,7 +14,7 @@ Dictionary<K, T>::~Dictionary() noexcept { delete[] _buckets; }
 template <typename K, typename T>
 void Dictionary<K, T>::Put(const K& key, T element) {
     /* Calculate the key hash */
-    const unsigned short hash = Hash::Get(key) % _capacity;
+    const unsigned short hash = ::hash(key) % _capacity;
 
     /* Try to get the node from the linked list */
     for (const Node& node : _buckets[hash])
@@ -31,7 +31,7 @@ void Dictionary<K, T>::Put(const K& key, T element) {
 template <typename K, typename T>
 T& Dictionary<K, T>::Get(const K& key) {
     /* Calculate the key hash */
-    const unsigned short hash = Hash::Get(key) % _capacity;
+    const unsigned short hash = ::hash(key) % _capacity;
 
     /* Try to get the node from the linked list */
     for (Node& node : _buckets[hash])
@@ -45,7 +45,7 @@ T& Dictionary<K, T>::Get(const K& key) {
 template <typename K, typename T>
 const T& Dictionary<K, T>::Get(const K& key) const {
     /* Calculate the key hash */
-    const unsigned short hash = Hash::Get(key) % _capacity;
+    const unsigned short hash = ::hash(key) % _capacity;
 
     /* Try to get the node from the linked list */
     for (const Node& node : _buckets[hash])
@@ -59,7 +59,7 @@ const T& Dictionary<K, T>::Get(const K& key) const {
 template <typename K, typename T>
 bool Dictionary<K, T>::Has(const K& key) const noexcept {
     /* Calculate the key hash */
-    const unsigned short hash = Hash::Get(key) % _capacity;
+    const unsigned short hash = ::hash(key) % _capacity;
 
     /* Try to get the node from the linked list */
     for (const Node& node : _buckets[hash])
@@ -73,7 +73,7 @@ bool Dictionary<K, T>::Has(const K& key) const noexcept {
 template <typename K, typename T>
 void Dictionary<K, T>::Delete(const K& key) {
     /* Calculate the key hash */
-    const unsigned short hash = Hash::Get(key) % _capacity;
+    const unsigned short hash = ::hash(key) % _capacity;
 
     /* Try to get the node from the linked list */
     short index = 0;
