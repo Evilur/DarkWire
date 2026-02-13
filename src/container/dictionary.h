@@ -131,12 +131,6 @@ private:
      * A size of the array with linked lists
      */
     const unsigned short _capacity;
-
-    /**
-     * Compare two keys
-     * @return true if the keys are equal, otherwise - false
-     */
-    static bool Equal(const K& key1, const K& key2) noexcept;
 };
 
 #include "dictionary_imp.h"

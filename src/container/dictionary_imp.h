@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dictionary.h"
+#include "util/equal.h"
 #include "util/hash.h"
 
 template <typename K, typename T>
@@ -17,7 +18,7 @@ void Dictionary<K, T>::Put(const K& key, T element) {
 
     /* Try to get the node from the linked list */
     for (const Node& node : _buckets[hash])
-        if (Equal(node.key, key))
+        if (equal(node.key, key))
             throw std::runtime_error(
                 "Dictionary: Put() an element with such a key already exists"
             );
@@ -34,7 +35,7 @@ T& Dictionary<K, T>::Get(const K& key) {
 
     /* Try to get the node from the linked list */
     for (Node& node : _buckets[hash])
-        if (Equal(node.key, key))
+        if (equal(node.key, key))
             return node.element;
 
     /* If there is NOT an element in the linked list, throw an error */
@@ -48,7 +49,7 @@ const T& Dictionary<K, T>::Get(const K& key) const {
 
     /* Try to get the node from the linked list */
     for (const Node& node : _buckets[hash])
-        if (Equal(node.key, key))
+        if (equal(node.key, key))
             return node.element;
 
     /* If there is NOT an element in the linked list, throw an error */
@@ -62,7 +63,7 @@ bool Dictionary<K, T>::Has(const K& key) const noexcept {
 
     /* Try to get the node from the linked list */
     for (const Node& node : _buckets[hash])
-        if (Equal(node.key, key))
+        if (equal(node.key, key))
             return true;
 
     /* If there is NOT an element in the linked list, return false */
@@ -78,7 +79,7 @@ void Dictionary<K, T>::Delete(const K& key) {
     short index = 0;
     bool has_element = false;
     for (const Node& node : _buckets[hash]) {
-        if (Equal(node.key, key)) {
+        if (equal(node.key, key)) {
             has_element = true;
             break;
         }
@@ -112,13 +113,6 @@ Dictionary<K, T>::Iterator Dictionary<K, T>::end() const noexcept {
      * index == capacity and internal list iterator == nullptr */
     return Iterator(_capacity, _capacity, _buckets,
                     typename LinkedList<Node>::Iterator(nullptr));
-}
-
-template <typename K, typename T>
-bool Dictionary<K, T>::Equal(const K& key1, const K& key2) noexcept {
-    if constexpr (std::is_same_v<K, const char*>)
-        return strcmp(key1, key2) == 0;
-    else return key1 == key2;
 }
 
 template <typename K, typename T>
