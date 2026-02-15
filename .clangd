@@ -57,6 +57,8 @@ Diagnostics:
       - cppcoreguidelines-owning-memory
       - google-runtime-int
       - hicpp-no-array-decay
+      - bugprone-casting-through-void
+      - cppcoreguidelines-avoid-do-while
       - hicpp-use-auto
       - readability-identifier-length
       - fuchsia-default-arguments-declarations
