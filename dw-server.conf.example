@@ -14,10 +14,10 @@ Address = 10.0.0.1/24
 MTU = 1420
 
 # Scripts to run before/after the interface is up/down
-PreUp =
-PostUp =
-PreDown =
-PostDown =
+# PreUp =
+# PostUp =
+# PreDown =
+# PostDown =
 
 ##############
 # Peers list #
