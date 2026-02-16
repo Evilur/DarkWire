@@ -32,4 +32,4 @@ IP = 10.0.0.25
 
 [Peer]
 PublicKey = <peer's public key>
-AllowedIPs = 10.0.0.25/24
+IP = 10.0.0.30

@@ -1,5 +1,6 @@
 build
 .cache
 nvim.Makefile
-dw-client.conf
 dw-server.conf
+peer1.conf
+peer2.conf
