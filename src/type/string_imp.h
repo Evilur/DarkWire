@@ -26,8 +26,7 @@ T String::ToInt(const char* str) noexcept {
 
 template <typename... Args>
 String String::Format(const char* const format, Args... args) {
-    const int string_size = snprintf(nullptr, 0, format, args...);
-    String result(string_size);
+    String result((unsigned long)snprintf(nullptr, 0, format, args...));
     sprintf(result._str, format, args...);
     return result;
 }
