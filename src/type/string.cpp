@@ -60,7 +60,16 @@ String String::operator+(const char symbol) const {
     return result;
 }
 
+String String::operator+(const char* const str) const {
+    const unsigned long str_size = strlen(str);
+    String result(_str, _size + str_size + 1);
+    memcpy(result._str + _size, str, str_size);
+    return result;
+}
+
 String::operator const char*() const noexcept { return _str; }
+
+String::operator char*() const noexcept { return _str; }
 
 String::operator std::string_view() const noexcept { return { _str, _size }; }
 

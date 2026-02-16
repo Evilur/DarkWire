@@ -22,7 +22,11 @@ public:
 
     String operator+(char symbol) const;
 
+    String operator+(const char* str) const;
+
     operator const char*() const noexcept;
+
+    operator char*() const noexcept;
 
     operator std::string_view() const noexcept;
 
