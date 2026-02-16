@@ -66,7 +66,25 @@ static void on_terminate() {
 }
 
 static int print_help() {
-    return -1;
+    constexpr const char* const help_message =
+        "NAME:\n"
+        "\tdw - DarkWire\n\n"
+        "DESCRIPTION:\n"
+        "\tBuild the Peer2Peer virtual private network (VPN)\n"
+        "\tfor fast data transfering between the peers\n"
+        "USAGE:\n"
+        "\tdw [arguments]\n\n"
+        "ARGUMENTS:\n"
+        "\t-h, --help\n"
+        "\t\tDisplay this help and exit\n"
+        "\tgenkey\n"
+        "\t\tGenerate a pair of the secret key and its public key\n"
+        "\tpubkey\n"
+        "\t\tGenerate a public key by the secret key\n"
+        "\t<config name>\n"
+        "\t\tRun the program using the config file\n";
+    printf(help_message);
+    return 0;
 }
 
 static int genkey() {
