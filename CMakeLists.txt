@@ -28,3 +28,6 @@ ADD_CUSTOM_COMMAND(TARGET tests POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${CMAKE_SOURCE_DIR}/test/units $<TARGET_FILE_DIR:dw>/test/units
 )
+
+# Link libraries
+TARGET_LINK_LIBRARIES(dw PRIVATE sodium)
