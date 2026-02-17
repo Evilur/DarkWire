@@ -121,6 +121,6 @@ template <typename F> void UnitTest::Run(const char* title, F func) {
     }
     else {
         printf("\033[31m[ERROR]\n");
-        printf("See current output in: %s\n", temp_file_path.c_str());
+        printf("See current output in: '%s'\n", temp_file_path.c_str());
     }
 }
