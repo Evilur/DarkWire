@@ -67,6 +67,14 @@ String String::operator+(const char* const str) const {
     return result;
 }
 
+bool String::operator==(const String& other) const noexcept {
+    return strcmp(_str, other._str) == 0;
+}
+
+bool String::operator!=(const String& other) const noexcept {
+    return strcmp(_str, other._str) != 0;
+}
+
 String::operator const char*() const noexcept { return _str; }
 
 String::operator char*() const noexcept { return _str; }

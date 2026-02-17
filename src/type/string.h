@@ -24,6 +24,10 @@ public:
 
     String operator+(const char* str) const;
 
+    bool operator==(const String& other) const noexcept;
+
+    bool operator!=(const String& other) const noexcept;
+
     operator const char*() const noexcept;
 
     operator char*() const noexcept;

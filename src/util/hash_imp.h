@@ -6,7 +6,7 @@
 #include <type_traits>
 
 static inline unsigned long calculate(const unsigned char* element,
-                               const unsigned short size) noexcept {
+                                      const unsigned short size) noexcept {
     /* The variable to store the hash (751 - random prime number) */
     unsigned long hash = 751;
 
@@ -21,17 +21,6 @@ static inline unsigned long calculate(const unsigned char* element,
     return hash;
 }
 
-template <>
-inline unsigned long hash(const char* const& element) noexcept {
-    return calculate((const unsigned char*)(void*)element,
-                     strlen(element) + 1);
-}
-
-template <>
-inline unsigned long hash(char* const& element) noexcept {
-    return hash((const char*)element);
-}
-
 template <typename T>
 inline unsigned long hash(const T& element) noexcept {
     /* Get the byte array from the element and calc the hash */
@@ -40,4 +29,16 @@ inline unsigned long hash(const T& element) noexcept {
     else
         return calculate((const unsigned char*)(void*)&element,
                          sizeof(element));
+}
+
+template <>
+inline unsigned long hash(const char* const& element) noexcept {
+    return calculate((const unsigned char*)(void*)element,
+                     strlen(element) + 1);
+}
+
+template <>
+inline unsigned long hash(char* const& element) noexcept {
+    return calculate((const unsigned char*)(void*)element,
+                     strlen(element) + 1);
 }
