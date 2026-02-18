@@ -14,22 +14,20 @@ Address = 10.0.0.1/24
 MTU = 1420
 
 # Scripts to run before/after the interface is up/down
-# PreUp =
-# PostUp =
-# PreDown =
-# PostDown =
+PreUp =
+PostUp =
+PreDown =
+PostDown =
 
 ##############
 # Peers list #
 ##############
-[Peer]
+[Peers]
 
-# Peer's public key, the result of the `dw pubkey <private peer key>` command
-PublicKey = <peer's public key>
-
-# IP address of the peer
-IP = 10.0.0.25
-
-[Peer]
-PublicKey = <peer's public key>
-IP = 10.0.0.30
+# List of peer's public keys,
+# the result of the `dw pubkey <private peer key>` command
+cwSzmrb91NhdqPVGFst8VBpxv+ksPoA502Emz1qYSnw=
+kTEJhY3xpBoFJ4Z9ivDz9pwc9l9EgGaNXdwrQOtBXVk=
+aNaDaECYZ4dS+RZGLuxuuzkpTmrckrdCWOV2WnAwHW4=
+xGs4YRgl1aK8UgC4jowb1iHPqrgmmGuUgynFzTFezBI=
+1igpAes56OgVrSEkum8sQJ1pwKo/owFblHuZiMg6CGM=
