@@ -1,5 +1,5 @@
 #include "util/logger.h"
-#include "container/dictionary.h"
+#include "core/config.h"
 #include "type/string.h"
 #include "util/path.h"
 
@@ -28,6 +28,10 @@ static int genkey();
 static int pubkey();
 
 static int handle_config(const char* name);
+
+static int run_client();
+
+static int run_server();
 
 int main(const int argc, const char* const* const argv) {
     /* Bind the 'on_terminate' handler */
@@ -213,8 +217,7 @@ static int handle_config(const char* const name) {
     /* Read the config file line by line */
     constexpr int BUFFER_SIZE = 1024 * 8;
     char line_buffer[BUFFER_SIZE];
-    Dictionary<String, const char*>* current_section_dict = nullptr;
-    Dictionary<String, Dictionary<String, const char*>*> config_dict(4);
+    char current_section[16] = "\0";;
     while (config.getline(line_buffer, BUFFER_SIZE)) {
         /* Delete the comments */
         char* comment_ptr = strchr(line_buffer, '#');
@@ -229,19 +232,22 @@ static int handle_config(const char* const name) {
 
         /* If there is a section line */
         if (*line_ptr == '[') {
-            /* Read the section name */
-            char section_name[16];
-            sscanf(line_ptr, "[%15[^]]]", section_name);
-
-            /* Put the parameters dictionary to the sectiona dictionary */
-            current_section_dict = new Dictionary<String, const char*>(16);
-            config_dict.Put(section_name, current_section_dict);
-            TRACE_LOG("Reading the config section '%s'", section_name);
+            /* Save the section name */
+            sscanf(line_ptr, "[%15[^]]]", current_section);
+            TRACE_LOG("Reading the config section [%s]", current_section);
             continue;
         }
 
         /* If there isn't any section */
-        if (current_section_dict == nullptr) continue;
+        if (*current_section == '\0') continue;
+
+        /* If there is a 'Peers' section */
+        if (strcmp(current_section, "Peers") == 0) {
+            if (Config::peers == nullptr)
+                Config::peers = new LinkedList<String>();
+            Config::peers->Push(line_buffer);
+            continue;
+        }
 
         /* Save the parameter key */
         char* const parameter_key = line_ptr;
@@ -258,11 +264,41 @@ static int handle_config(const char* const name) {
         char* parameter_value = new char[strlen(parameter_value_ptr)];
         strcpy(parameter_value, parameter_value_ptr);
 
-        /* Save the parameter to the dictionary */
-        current_section_dict->Put(parameter_key, parameter_value);
-        TRACE_LOG("Config parameter has been saved: %s = %s",
-                  parameter_key, parameter_value);
+        /* Save the parameter */
+        if (strcmp(current_section, "Interface") == 0) {
+            if (strcmp(parameter_key, "PrivateKey") == 0)
+                Config::Interface::private_key = parameter_value;
+            else if (strcmp(parameter_key, "Address") == 0)
+                Config::Interface::address = parameter_value;
+            else if (strcmp(parameter_key, "MTU") == 0)
+                Config::Interface::mtu = parameter_value;
+            else if (strcmp(parameter_key, "PreUp") == 0)
+                Config::Interface::pre_up = parameter_value;
+            else if (strcmp(parameter_key, "PostUp") == 0)
+                Config::Interface::post_up = parameter_value;
+            else if (strcmp(parameter_key, "PreDown") == 0)
+                Config::Interface::pre_down = parameter_value;
+            else if (strcmp(parameter_key, "PostDown") == 0)
+                Config::Interface::post_down = parameter_value;
+        } else if (strcmp(current_section, "Server") == 0) {
+            if (strcmp(parameter_key, "PublicKey") == 0)
+                Config::Server::public_key = parameter_value;
+            else if (strcmp(parameter_key, "Endpoint") == 0)
+                Config::Server::endpoint = parameter_value;
+        }
     }
 
-    return 0;
+    /* If there is a client */
+    if (Config::peers == nullptr) return run_client();
+
+    /* If there is a server */
+    return run_server();
+}
+
+static int run_client() {
+    return -1;
+}
+
+static int run_server() {
+    return -1;
 }

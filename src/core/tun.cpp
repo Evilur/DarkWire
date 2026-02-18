@@ -1,5 +1,6 @@
 #include "tun.h"
 #include "exception/tun_error.h"
+#include "util/system.h"
 
 #include <cstring>
 #include <fcntl.h>

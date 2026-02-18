@@ -3,7 +3,7 @@
 #include "util/class.h"
 
 /**
- * Static class for working with network interface
+ * Class for working with virtual network interface
  * @author Evilur <the.evilur@gmail.com>
  */
 class TUN final {
