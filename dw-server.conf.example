@@ -9,11 +9,17 @@ PrivateKey = <private key>
 # Yours server IP address and net mask
 Address = 10.0.0.1/24
 
+# Local port to listen requests from the peers
+# Default: 58094
+Listen = 58094
+
 # Maximum transmission unit
 # Do not change the value until you are sure
+# Default: 58094
 MTU = 1420
 
 # Scripts to run before/after the interface is up/down
+# *Not necessary
 PreUp =
 PostUp =
 PreDown =
@@ -25,7 +31,7 @@ PostDown =
 [Peers]
 
 # List of peer's public keys,
-# the result of the `dw pubkey <private peer key>` command
+# the result of the `echo <private peer key> | dw pubkey` command
 cwSzmrb91NhdqPVGFst8VBpxv+ksPoA502Emz1qYSnw=
 kTEJhY3xpBoFJ4Z9ivDz9pwc9l9EgGaNXdwrQOtBXVk=
 aNaDaECYZ4dS+RZGLuxuuzkpTmrckrdCWOV2WnAwHW4=
