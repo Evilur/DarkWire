@@ -1,7 +1,11 @@
 #include "util/logger.h"
 #include "core/config.h"
+#include "core/key.h"
+#include "core/tun.h"
+#include "socket/udp_socket.h"
 #include "type/string.h"
 #include "util/path.h"
+#include "util/system.h"
 
 #include <cstdio>
 #include <cstring>
@@ -19,6 +23,10 @@
     #define FILENO fileno
 #endif
 
+static String interface_name = "";
+
+static TUN* tun = nullptr;
+
 static void on_terminate();
 
 static int print_help();
@@ -32,6 +40,8 @@ static int handle_config(const char* name);
 static int run_client();
 
 static int run_server();
+
+static void up_interface();
 
 int main(const int argc, const char* const* const argv) {
     /* Bind the 'on_terminate' handler */
@@ -55,7 +65,15 @@ int main(const int argc, const char* const* const argv) {
         return print_help();
     if (strcmp(arg, "genkey") == 0) return genkey();
     if (strcmp(arg, "pubkey") == 0) return pubkey();
-    return handle_config(arg);
+
+    /* Hadnle the config */
+    if (handle_config(arg) == -1) return -1;
+
+    /* If there is a client */
+    if (Config::peers == nullptr) return run_client();
+
+    /* If there is a server */
+    return run_server();
 }
 
 static void on_terminate() {
@@ -270,6 +288,8 @@ static int handle_config(const char* const name) {
                 Config::Interface::private_key = parameter_value;
             else if (strcmp(parameter_key, "Address") == 0)
                 Config::Interface::address = parameter_value;
+            else if (strcmp(parameter_key, "Listen") == 0)
+                Config::Interface::listen = parameter_value;
             else if (strcmp(parameter_key, "MTU") == 0)
                 Config::Interface::mtu = parameter_value;
             else if (strcmp(parameter_key, "PreUp") == 0)
@@ -288,17 +308,46 @@ static int handle_config(const char* const name) {
         }
     }
 
-    /* If there is a client */
-    if (Config::peers == nullptr) return run_client();
+    /* Check the private key */
+    if (*(const char*)Config::Interface::private_key == '\0') {
+        FATAL_LOG("There is no private key in the config");
+        return -1;
+    }
 
-    /* If there is a server */
-    return run_server();
+    /* Save the private key */
+    Key::Put((const char*)Config::Interface::private_key);
+
+    /* Set the tune name and return the success code */
+    interface_name = config_path.stem().c_str();
+    return 0;
 }
 
 static int run_client() {
+    /* Get the server address */
+    char endpoint[] = "127.127.127.127:65535";
+    strcpy(endpoint, (const char*)Config::Server::endpoint);
+    sockaddr_in address = UDPSocket::GetAddress(endpoint);
+
+    up_interface();
     return -1;
 }
 
 static int run_server() {
+    up_interface();
     return -1;
+}
+
+static void up_interface() {
+    /* Exec the PreUp command */
+    const char* const pre_up = (const char*)Config::Interface::pre_up;
+    if (*pre_up != '\0') System::Exec(pre_up);
+
+    /* Create the interface */
+    tun = new TUN(interface_name);
+    tun->Up();
+    INFO_LOG("Interface '%s' has been created", (const char*)interface_name);
+
+    /* Exec the PostUp command */
+    const char* const post_up = (const char*)Config::Interface::post_up;
+    if (*post_up != '\0') System::Exec(post_up);
 }
