@@ -2,12 +2,6 @@
 
 #include "cstring"
 
-Config::Parameter::Parameter(const Type type) : _type(type) {
-    if (_type == INTEGER) _data = new int();
-    else if (type == FLOAT) _data = new float();
-    else _data = nullptr;
-}
-
 Config::Parameter::Parameter(const int data) :
     _type(INTEGER), _data(new int(data)) { }
 

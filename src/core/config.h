@@ -19,8 +19,6 @@ private:
 
         enum Type : char { INTEGER, FLOAT, STRING };
 
-        Parameter(Type type);
-
         Parameter(int data);
 
         Parameter(float data);
@@ -48,18 +46,19 @@ private:
 
 public:
     struct Interface {
-        static inline Parameter private_key = Parameter(Parameter::STRING);
-        static inline Parameter address = Parameter(Parameter::STRING);
-        static inline Parameter mtu = Parameter(Parameter::INTEGER);
-        static inline Parameter pre_up = Parameter(Parameter::STRING);
-        static inline Parameter post_up = Parameter(Parameter::STRING);
-        static inline Parameter pre_down = Parameter(Parameter::STRING);
-        static inline Parameter post_down = Parameter(Parameter::STRING);
+        static inline Parameter private_key = "";
+        static inline Parameter address = "";
+        static inline Parameter listen = 58094;
+        static inline Parameter mtu = 1420;
+        static inline Parameter pre_up = "";
+        static inline Parameter post_up = "";
+        static inline Parameter pre_down = "";
+        static inline Parameter post_down = "";
     };
 
     struct Server {
-        static inline Parameter public_key = Parameter(Parameter::STRING);
-        static inline Parameter endpoint = Parameter(Parameter::STRING);
+        static inline Parameter public_key = "";
+        static inline Parameter endpoint = "";
     };
 
     static inline LinkedList<String>* peers = nullptr;
