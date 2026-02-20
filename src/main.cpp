@@ -1,6 +1,6 @@
 #include "util/logger.h"
 #include "core/config.h"
-#include "core/key.h"
+#include "core/keys.h"
 #include "core/tun.h"
 #include "socket/udp_socket.h"
 #include "type/string.h"
@@ -26,6 +26,8 @@
 static String interface_name = "";
 
 static TUN* tun = nullptr;
+
+static const Keys* static_keys = nullptr;
 
 static void on_terminate();
 
@@ -116,30 +118,20 @@ static int print_help() {
 }
 
 static int genkey() {
-    /* Create buffers for keys */
-    constexpr int key_size = 32;
-    unsigned char secretkey_buffer[key_size];
-    unsigned char publickey_buffer[key_size];
-
-    /* Generate the secret key */
-    randombytes_buf(secretkey_buffer, key_size);
-
-    /* Generate the public key and do a key clamping */
-    crypto_scalarmult_base(publickey_buffer, secretkey_buffer);
+    /* Create the keys pair */
+    const Keys keys;
 
     /* Create a buffer for the base64 key representations */
     const unsigned long base64_size = sodium_base64_encoded_len(
-        key_size,
+        Keys::KEY_SIZE,
         sodium_base64_VARIANT_ORIGINAL
     );
     char* const base64_buffer = new char[base64_size + 1];
     base64_buffer[base64_size] = '\0';
 
     /* Convert the secret key to the base64 form */
-    sodium_bin2base64(base64_buffer,
-                      base64_size,
-                      secretkey_buffer,
-                      key_size,
+    sodium_bin2base64(base64_buffer, base64_size,
+                      keys.Secret(), Keys::KEY_SIZE,
                       sodium_base64_VARIANT_ORIGINAL);
 
     /* Print the base64 secret key representation */
@@ -147,7 +139,7 @@ static int genkey() {
 
     /* Convert the public key to the base64 form */
     sodium_bin2base64(base64_buffer, base64_size,
-                      publickey_buffer, key_size,
+                      keys.Public(), Keys::KEY_SIZE,
                       sodium_base64_VARIANT_ORIGINAL);
 
     /* Print the base64 public key representation */
@@ -159,14 +151,9 @@ static int genkey() {
 }
 
 static int pubkey() {
-    /* Create buffers for keys */
-    constexpr int key_size = 32;
-    unsigned char secretkey_buffer[key_size];
-    unsigned char publickey_buffer[key_size];
-
     /* Create a buffer for the base64 key representations */
     const unsigned long base64_size = sodium_base64_encoded_len(
-        key_size,
+        Keys::KEY_SIZE,
         sodium_base64_VARIANT_ORIGINAL
     );
     char* const base64_buffer = new char[base64_size + 1];
@@ -179,18 +166,12 @@ static int pubkey() {
         return -1;
     }
 
-    /* Decode the base64 */
-    sodium_base642bin(secretkey_buffer, key_size,
-                      base64_buffer, base64_size,
-                      nullptr, nullptr, nullptr,
-                      sodium_base64_VARIANT_ORIGINAL);
-
-    /* Generate the public key and do a key clamping */
-    crypto_scalarmult_base(publickey_buffer, secretkey_buffer);
+    /* Get the public pair of the secret key */
+    const Keys keys(base64_buffer);
 
     /* Convert the public key to the base64 form */
     sodium_bin2base64(base64_buffer, base64_size,
-                      publickey_buffer, key_size,
+                      keys.Public(), Keys::KEY_SIZE,
                       sodium_base64_VARIANT_ORIGINAL);
 
     /* Print the base64 public key representation */
@@ -314,8 +295,8 @@ static int handle_config(const char* const name) {
         return -1;
     }
 
-    /* Save the private key */
-    Key::Put((const char*)Config::Interface::private_key);
+    /* Save the keys pair */
+    static_keys = new Keys((const char*)Config::Interface::private_key);
 
     /* Set the tune name and return the success code */
     interface_name = config_path.stem().c_str();
@@ -345,7 +326,7 @@ static void up_interface() {
     /* Create the interface */
     tun = new TUN(interface_name);
     tun->Up();
-    INFO_LOG("Interface '%s' has been created", (const char*)interface_name);
+    INFO_LOG("Interface [%s] has been created", (const char*)interface_name);
 
     /* Exec the PostUp command */
     const char* const post_up = (const char*)Config::Interface::post_up;

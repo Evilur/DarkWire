@@ -16,7 +16,7 @@ Address = 10.0.0.25/24
 Listen = 58094
 
 # Maximum transmission unit
-# Do not change the value until you are sure
+# This value can't be more than 1500
 # Default: 1420
 MTU = 1420
 
