@@ -2,6 +2,8 @@
 
 #include "util/class.h"
 
+#include <sodium.h>
+
 /**
  * Storage for the secret and public keys
  * @author Evilur <the.evilur@gmail.com>
@@ -9,8 +11,6 @@
 class Keys final {
 public:
     ALLOW_COPY_ALLOW_MOVE(Keys);
-
-    static constexpr int KEY_SIZE = 32;
 
     explicit Keys() noexcept;
 
@@ -23,6 +23,6 @@ public:
     [[nodiscard]] const unsigned char* Public() const noexcept;
 
 private:
-    unsigned char _sk[KEY_SIZE];
-    unsigned char _pk[KEY_SIZE];
+    unsigned char _sk[crypto_scalarmult_SCALARBYTES];
+    unsigned char _pk[crypto_scalarmult_BYTES];
 };

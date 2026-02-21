@@ -1,4 +1,5 @@
 #include "tun.h"
+#include "core/config.h"
 #include "exception/tun_error.h"
 #include "util/system.h"
 
@@ -9,7 +10,7 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
-TUN::TUN(const char* const name) :
+TUN::TUN(const char* const name) : _tun_name(name),
     /* Open the TUN device */
     _tun_fd(open("/dev/net/tun", O_RDWR | O_CLOEXEC)) {
     if (_tun_fd == -1) throw TunError("Failed to open the TUN device");
@@ -24,6 +25,23 @@ TUN::TUN(const char* const name) :
     /* Create a new network interface */
     if (ioctl(_tun_fd, TUNSETIFF, (void*)&ifr) == -1)
         throw TunError("Ioctl TUNSETIFF failed");
+
+    /* IF all is OK */
+    System::Exec(String::Format("sysctl -w net.ipv6.conf.%s.disable_ipv6=1",
+                                name));
+    System::Exec(String::Format("ip addr add %s dev %s",
+                                (const char*)Config::Interface::address,
+                                name));
 }
 
 TUN::~TUN() noexcept { close(_tun_fd); }
+
+void TUN::Up() const noexcept {
+    System::Exec(String::Format("ip link set %s up",
+                                (const char*)_tun_name));
+}
+
+void TUN::Down() const noexcept {
+    System::Exec(String::Format("ip link set %s down",
+                                (const char*)_tun_name));
+}

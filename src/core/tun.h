@@ -1,5 +1,6 @@
 #pragma once
 
+#include "type/string.h"
 #include "util/class.h"
 
 /**
@@ -14,6 +15,11 @@ public:
 
     ~TUN() noexcept;
 
+    void Up() const noexcept;
+
+    void Down() const noexcept;
+
 private:
+    const String _tun_name;
     const int _tun_fd;
 };

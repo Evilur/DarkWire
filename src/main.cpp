@@ -1,9 +1,12 @@
-#include "util/logger.h"
+#include "package/server_handshake_request.h"
 #include "core/config.h"
 #include "core/keys.h"
 #include "core/tun.h"
 #include "socket/udp_socket.h"
 #include "type/string.h"
+#include "util/equal.h"
+#include "util/hkdf.h"
+#include "util/logger.h"
 #include "util/path.h"
 #include "util/system.h"
 
@@ -27,21 +30,27 @@ static String interface_name = "";
 
 static TUN* tun = nullptr;
 
+static sockaddr_in server { };
+
+static const UDPSocket main_socket { };
+
 static const Keys* static_keys = nullptr;
 
 static void on_terminate();
 
-static int print_help();
+[[nodiscard]] static int print_help();
 
-static int genkey();
+[[nodiscard]] static int genkey();
 
-static int pubkey();
+[[nodiscard]] static int pubkey();
 
-static int handle_config(const char* name);
+[[nodiscard]] static int handle_config(const char* name);
 
-static int run_client();
+[[nodiscard]] static int run_client();
 
-static int run_server();
+[[nodiscard]] static int run_server();
+
+[[nodiscard]] static int perform_server_handshake();
 
 static void up_interface();
 
@@ -123,7 +132,7 @@ static int genkey() {
 
     /* Create a buffer for the base64 key representations */
     const unsigned long base64_size = sodium_base64_encoded_len(
-        Keys::KEY_SIZE,
+        crypto_scalarmult_BYTES,
         sodium_base64_VARIANT_ORIGINAL
     );
     char* const base64_buffer = new char[base64_size + 1];
@@ -131,7 +140,7 @@ static int genkey() {
 
     /* Convert the secret key to the base64 form */
     sodium_bin2base64(base64_buffer, base64_size,
-                      keys.Secret(), Keys::KEY_SIZE,
+                      keys.Secret(), crypto_scalarmult_SCALARBYTES,
                       sodium_base64_VARIANT_ORIGINAL);
 
     /* Print the base64 secret key representation */
@@ -139,7 +148,7 @@ static int genkey() {
 
     /* Convert the public key to the base64 form */
     sodium_bin2base64(base64_buffer, base64_size,
-                      keys.Public(), Keys::KEY_SIZE,
+                      keys.Public(), crypto_scalarmult_BYTES,
                       sodium_base64_VARIANT_ORIGINAL);
 
     /* Print the base64 public key representation */
@@ -153,7 +162,7 @@ static int genkey() {
 static int pubkey() {
     /* Create a buffer for the base64 key representations */
     const unsigned long base64_size = sodium_base64_encoded_len(
-        Keys::KEY_SIZE,
+        crypto_scalarmult_BYTES,
         sodium_base64_VARIANT_ORIGINAL
     );
     char* const base64_buffer = new char[base64_size + 1];
@@ -171,7 +180,7 @@ static int pubkey() {
 
     /* Convert the public key to the base64 form */
     sodium_bin2base64(base64_buffer, base64_size,
-                      keys.Public(), Keys::KEY_SIZE,
+                      keys.Public(), crypto_scalarmult_BYTES,
                       sodium_base64_VARIANT_ORIGINAL);
 
     /* Print the base64 public key representation */
@@ -298,17 +307,45 @@ static int handle_config(const char* const name) {
     /* Save the keys pair */
     static_keys = new Keys((const char*)Config::Interface::private_key);
 
+    /* Init the main socket for all future connections */
+    main_socket.Bind({
+        .sin_family = AF_INET,
+        .sin_port = htons((unsigned short)(int)Config::Interface::listen),
+        .sin_addr = INADDR_ANY
+    });
+
+    /* Block the thread by the socket for no more than 6 seconds */
+    constexpr int seconds_to_wait = 6;
+#ifdef _WIN64
+    constexpr DWORD time = seconds_to_wait * 1000;
+#else
+    constexpr timeval time {
+        .tv_sec = seconds_to_wait,
+        .tv_usec = 0
+    };
+#endif
+    main_socket.SetOption(SO_RCVTIMEO, &time, sizeof(time));
+
     /* Set the tune name and return the success code */
     interface_name = config_path.stem().c_str();
     return 0;
 }
 
 static int run_client() {
-    /* Get the server address */
-    char endpoint[] = "127.127.127.127:65535";
-    strcpy(endpoint, (const char*)Config::Server::endpoint);
-    sockaddr_in address = UDPSocket::GetAddress(endpoint);
+    /* Save the server address */
+    {
+        char buffer[] = "255.255.255.255:65535";
+        strcpy(buffer, (const char*)Config::Server::endpoint);
+        server = UDPSocket::GetAddress(buffer);
+    }
 
+    /* Send the handshake to the server */
+    if (perform_server_handshake() == -1) {
+        FATAL_LOG("Failed to perform the peer-server handshake");
+        return -1;
+    }
+
+    /* Up the interface */
     up_interface();
     return -1;
 }
@@ -316,6 +353,67 @@ static int run_client() {
 static int run_server() {
     up_interface();
     return -1;
+}
+
+static int perform_server_handshake() {
+    /* Buffer for requests and responses */
+    char buffer[1500];
+
+    /* Buffer for the chained key */
+    unsigned char chain_key[crypto_stream_chacha20_KEYBYTES];
+
+    /* Send the handhake request */
+send_request:
+    INFO_LOG("Sending the handshake request to the server");
+    {
+        /* Generate the ephemeral key pair */
+        const Keys ephemeral_keys;
+
+        /* Fill the reuqest */
+        ServerHandshakeRequest* request =
+            (ServerHandshakeRequest*)(void*)(buffer);
+        request->Fill(ephemeral_keys.Public(),
+                      static_keys->Public(),
+                      (const char*)Config::Interface::address);
+
+        /* Compute the first shared secret */
+        unsigned char shared[crypto_scalarmult_BYTES];
+        if (crypto_scalarmult(shared,
+                              ephemeral_keys.Secret(),
+                              static_keys->Public()) == -1) {
+            FATAL_LOG("crypto_scalarmult: Failed to compute the shared secret");
+            return -1;
+        }
+
+        /* Get the chained ChaCha20 key */
+        hkdf(chain_key, nullptr, shared);
+
+        /* Crypt the payload */
+        crypto_stream_chacha20_xor((unsigned char*)(void*)&request->payload,
+                                   (unsigned char*)(void*)&request->payload,
+                                   sizeof(request->payload),
+                                   request->nonce,
+                                   chain_key);
+
+        /* Send the crypted message */
+        main_socket.Send(buffer, sizeof(ServerHandshakeRequest), server);
+    }
+
+    /* Try to the get server response */
+receive_response:
+    sockaddr_in from;
+    int response_size = main_socket.Receive(buffer, &from);
+
+    /* If there is an error */
+    if (response_size == -1) goto send_request;
+
+    /* If there is a package not from the server */
+    if (!equal(from, server)) goto receive_response;
+
+    /* If all is OK */
+    INFO_LOG("A response has been received from the server");
+
+    return 0;
 }
 
 static void up_interface() {

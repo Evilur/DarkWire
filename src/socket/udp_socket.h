@@ -26,9 +26,9 @@ public:
 
     void Connect(const sockaddr_in& address) const;
 
-    long Receive(char* buffer, sockaddr_in* from) const noexcept;
+    int Receive(char* buffer, sockaddr_in* from) const noexcept;
 
-    long Receive(char* buffer) const noexcept;
+    int Receive(char* buffer) const noexcept;
 
     void Send(const char* buffer, long buffer_size,
               const sockaddr_in& address) const noexcept;

@@ -40,44 +40,46 @@ Diagnostics:
     Add:
       - '*'
     Remove:
+      - altera-unroll-loops
+      - bugprone-casting-through-void
+      - bugprone-easily-swappable-parameters
       - cppcoreguidelines-avoid-c-arrays
-      - cppcoreguidelines-non-private-member-variables-in-classes
-      - fuchsia-statically-constructed-objects
-      - llvmlibc-inline-function-decl
+      - cppcoreguidelines-avoid-const-or-ref-data-members
+      - cppcoreguidelines-avoid-do-while
+      - cppcoreguidelines-avoid-goto
       - cppcoreguidelines-avoid-magic-numbers
-      - readability-magic-numbers
+      - cppcoreguidelines-non-private-member-variables-in-classes
+      - cppcoreguidelines-owning-memory
+      - cppcoreguidelines-pro-bounds-array-to-pointer-decay
       - cppcoreguidelines-pro-bounds-pointer-arithmetic
-      - fuchsia-default-arguments-calls
+      - cppcoreguidelines-pro-type-cstyle-cast
       - cppcoreguidelines-pro-type-vararg
-      - hicpp-vararg
+      - fuchsia-default-arguments-calls
+      - fuchsia-default-arguments-declarations
       - fuchsia-overloaded-operator
+      - fuchsia-statically-constructed-objects
       - google-readability-braces-around-statements
       - google-readability-casting
-      - hicpp-avoid-c-arrays
-      - cppcoreguidelines-owning-memory
       - google-runtime-int
-      - hicpp-no-array-decay
-      - bugprone-casting-through-void
-      - cppcoreguidelines-avoid-do-while
-      - hicpp-use-auto
-      - readability-identifier-length
-      - fuchsia-default-arguments-declarations
-      - cppcoreguidelines-avoid-const-or-ref-data-members
-      - modernize-use-auto
-      - bugprone-easily-swappable-parameters
-      - cppcoreguidelines-pro-type-cstyle-cast
-      - cppcoreguidelines-pro-bounds-array-to-pointer-decay
+      - hicpp-avoid-c-arrays
+      - hicpp-avoid-goto
       - hicpp-braces-around-statements
+      - hicpp-no-array-decay
+      - hicpp-use-auto
+      - hicpp-vararg
       - llvmlibc-callee-namespace
       - llvmlibc-implementation-in-namespace
-      - misc-use-anonymous-namespace
-      - altera-unroll-loops
+      - llvmlibc-inline-function-decl
       - llvmlibc-inline-function-decl
       - llvmlibc-restrict-system-libc-headers
       - misc-non-private-member-variables-in-classes
+      - misc-use-anonymous-namespace
       - modernize-avoid-c-arrays
+      - modernize-use-auto
       - modernize-use-trailing-return-type
       - readability-braces-around-statements
+      - readability-identifier-length
+      - readability-magic-numbers
     MissingIncludes: Strict
 Completion:
   AllScopes: Yes

@@ -48,7 +48,7 @@ public:
     struct Interface {
         static inline Parameter private_key = "";
         static inline Parameter address = "";
-        static inline Parameter listen = 58094;
+        static inline Parameter listen = 0;
         static inline Parameter mtu = 1420;
         static inline Parameter pre_up = "";
         static inline Parameter post_up = "";

@@ -83,12 +83,12 @@ void UDPSocket::Connect(const sockaddr_in& address) const {
              ntohs(address.sin_port));
 }
 
-long UDPSocket::Receive(char* buffer, sockaddr_in* from)
+int UDPSocket::Receive(char* buffer, sockaddr_in* from)
 const noexcept {
     /* Receive the data */
     socklen_t from_len = sizeof(sockaddr_in);
-    const long result = recvfrom(_socket_fd, buffer, MTU, 0,
-                           (sockaddr*)from, &from_len);
+    const int result = (int)recvfrom(_socket_fd, buffer, MTU, 0,
+                                     (sockaddr*)from, &from_len);
 
     /* Print the log */
 #if LOG_LEVEL == 0
@@ -104,10 +104,10 @@ const noexcept {
     return result;
 }
 
-long UDPSocket::Receive(char* buffer)
+int UDPSocket::Receive(char* buffer)
 const noexcept {
     /* Receive the data */
-    const long result = recv(_socket_fd, buffer, MTU, 0);
+    const int result = (int)recv(_socket_fd, buffer, MTU, 0);
 
     /* Print the log */
 #if LOG_LEVEL == 0
