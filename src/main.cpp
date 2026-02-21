@@ -296,44 +296,19 @@ static int run_client() {
         server = UDPSocket::GetAddress(buffer);
     }
 
-    /* Buffer for requests and responses */
-    char buffer[1500 + 1 + crypto_stream_chacha20_NONCEBYTES];
-
-    /* Send the handshake to the server */
-    {
-        /* Buffer for the chained key */
-        unsigned char chain_key[crypto_stream_chacha20_KEYBYTES];
-
-        /* Send the handhake request */
-    send_request:
-        while (!Client::SendHandshakeToServer(buffer, chain_key))
-            ERROR_LOG("Failed to send the handshake request to the server");
-
-        /* Try to the get server response */
-    receive_response:
-        sockaddr_in from;
-        int response_size = main_socket.Receive(buffer, &from);
-
-        /* If there is an error */
-        if (response_size == -1) goto send_request;
-
-        /* If there is a package not from the server */
-        if (!equal(from, server)) goto receive_response;
-
-        /* If all is OK, handle the response */
-        INFO_LOG("The response has been received from the server");
-    }
+    /* Perform the handshake with the server */
+    Client::PerformHandshakeWithServer();
 
     /* Up the interface */
     up_interface();
-    return -1;
+    return 0;
 }
 
 static int run_server() {
     /* Buffer for requests and responses */
     char buffer[1500 + 1 + crypto_stream_chacha20_NONCEBYTES];
 
-    /* Wait for reuqests */
+    /* Waitin g for requests */
 receive_request:
     sockaddr_in from;
     int response_size = main_socket.Receive(buffer, &from);

@@ -3,12 +3,13 @@
 #include "util/class.h"
 
 /**
- * Static class for client only methods
+ * Static class for server only methods
  * @author Evilur <the.evilur@gmail.com>
  */
 class Client final {
 public:
     PREVENT_INSTANTIATION(Client);
 
-    static void PerformHandshakeWithServer() noexcept;
+    [[nodiscard]]
+    static bool HandlePackage(char* buffer) noexcept;
 };
