@@ -1,0 +1,10 @@
+#pragma once
+
+enum PackageType : unsigned char {
+    SERVER_HANDSHAKE_REQUEST = 1,
+    SERVER_HANDSHAKE_RESPONSE = 2,
+    PEER_HANDSHAKE_REQUEST = 3,
+    PEER_HANDSHAKE_RESPONSE = 4,
+    KEEPALIVE = 5,
+    TRANSFER_DATA = 6
+};

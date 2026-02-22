@@ -1,21 +1,24 @@
 #pragma once
 
-#include "package.h"
+#include "package_type.h"
 
 #include <sodium.h>
 
 struct ServerHandshakeRequest final {
-    Package::Type type;
-    unsigned char ephemeral_public_key[crypto_scalarmult_BYTES];
-    unsigned char nonce[crypto_stream_chacha20_NONCEBYTES];
+    struct {
+        PackageType type;
+        unsigned char ephemeral_public_key[crypto_scalarmult_BYTES];
+        unsigned char nonce[crypto_aead_chacha20poly1305_ietf_NPUBBYTES];
+    } __attribute__((packed)) header;
     struct {
         unsigned char static_public_key[crypto_scalarmult_BYTES];
         unsigned long timestamp;
         unsigned int ip;
         unsigned char netmask;
-    } __attribute__((aligned(64))) __attribute__((packed)) payload;
+    } __attribute__((packed)) payload;
+    unsigned char poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
     void Fill(const unsigned char* epk,
               const unsigned char* spk,
               const char* address);
-} __attribute__((aligned(128)));
+} __attribute__((packed));

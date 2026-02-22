@@ -21,6 +21,8 @@ inline String interface_name = "";
 
 inline sockaddr_in server;
 
+inline unsigned char server_public_key[crypto_scalarmult_BYTES];
+
 inline const TUN* tun = nullptr;
 
 inline const UDPSocket main_socket;

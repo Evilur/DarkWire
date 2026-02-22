@@ -8,13 +8,13 @@ void ServerHandshakeRequest::Fill(const unsigned char* const epk,
                                   const unsigned char* const spk,
                                   const char* const address) {
     /* Set the type */
-    type = Package::SERVER_HANDSHAKE_REQUEST;
+    header.type = SERVER_HANDSHAKE_REQUEST;
 
     /* Set the nonce */
-    randombytes_buf(nonce, crypto_stream_chacha20_NONCEBYTES);
+    randombytes_buf(header.nonce, crypto_stream_chacha20_NONCEBYTES);
 
     /* Copy the public keys */
-    memcpy(ephemeral_public_key, epk, crypto_scalarmult_BYTES);
+    memcpy(header.ephemeral_public_key, epk, crypto_scalarmult_BYTES);
     memcpy(payload.static_public_key, spk, crypto_scalarmult_BYTES);
 
     /* Set the timestampt */

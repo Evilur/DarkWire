@@ -11,7 +11,7 @@ void Client::PerformHandshakeWithServer() noexcept {
     char buffer[1500];
 
     /* Buffer for the chained key */
-    unsigned char chain_key[crypto_stream_chacha20_KEYBYTES];
+    unsigned char chain_key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
 
     /* Send the handhake request */
 send_request:
@@ -25,14 +25,15 @@ send_request:
         ServerHandshakeRequest* request =
             (ServerHandshakeRequest*)(void*)(buffer);
         request->Fill(ephemeral_keys.Public(),
-                      static_keys->Public(),
+                      //static_keys->Public(),
+                      (const unsigned char*)"PENIS",
                       (const char*)Config::Interface::address);
 
         /* Compute the first shared secret */
         unsigned char shared[crypto_scalarmult_BYTES];
         if (crypto_scalarmult(shared,
                               ephemeral_keys.Secret(),
-                              static_keys->Public()) == -1) {
+                              server_public_key) == -1) {
             ERROR_LOG("crypto_scalarmult: Failed to compute the shared secret");
             goto send_request;
         }
@@ -41,11 +42,18 @@ send_request:
         hkdf(chain_key, nullptr, shared);
 
         /* Crypt the payload */
-        crypto_stream_chacha20_xor((unsigned char*)(void*)&request->payload,
-                                   (unsigned char*)(void*)&request->payload,
-                                   sizeof(request->payload),
-                                   request->nonce,
-                                   chain_key);
+        unsigned long long dummy_len;
+        crypto_aead_chacha20poly1305_ietf_encrypt(
+            (unsigned char*)(void*)&request->payload,
+            &dummy_len,
+            (unsigned char*)(void*)&request->payload,
+            sizeof(request->payload),
+            (unsigned char*)(void*)&request->header,
+            sizeof(request->header),
+            nullptr,
+            request->header.nonce,
+            chain_key
+        );
 
         /* Send the crypted message */
         main_socket.Send(buffer, sizeof(ServerHandshakeRequest), server);

@@ -1,7 +1,7 @@
 #include "core/client.h"
 #include "core/config.h"
+#include "core/server.h"
 #include "main.h"
-#include "util/equal.h"
 #include "util/logger.h"
 #include "util/path.h"
 #include "util/system.h"
@@ -185,8 +185,10 @@ static int handle_config(const char* const name) {
     char current_section[16] = "\0";;
     while (config.getline(line_buffer, BUFFER_SIZE)) {
         /* Delete the comments */
-        char* comment_ptr = strchr(line_buffer, '#');
-        if (comment_ptr != nullptr) *comment_ptr = '\0';
+        {
+            char* comment_ptr = strchr(line_buffer, '#');
+            if (comment_ptr != nullptr) *comment_ptr = '\0';
+        }
 
         /* Get the first non-space char */
         char* line_ptr = line_buffer;
@@ -194,6 +196,12 @@ static int handle_config(const char* const name) {
 
         /* Skip the blank lines */
         if (*line_ptr == '\0') continue;
+
+        /* Trim spaces at the end */
+        {
+            char* line_end = line_ptr + strlen(line_ptr);
+            while (*--line_end == ' ') *line_end = '\0';
+        }
 
         /* If there is a section line */
         if (*line_ptr == '[') {
@@ -264,6 +272,14 @@ static int handle_config(const char* const name) {
     /* Save the keys pair */
     static_keys = new Keys((const char*)Config::Interface::private_key);
 
+    /* Save the server public key */
+    const char* server_public_key_ptr =
+        (const char*)Config::Server::public_key;
+    sodium_base642bin(server_public_key, crypto_scalarmult_BYTES,
+                      server_public_key_ptr, strlen(server_public_key_ptr),
+                      nullptr, nullptr, nullptr,
+                      sodium_base64_VARIANT_ORIGINAL);
+
     /* Init the main socket for all future connections */
     main_socket.Bind({
         .sin_family = AF_INET,
@@ -305,18 +321,23 @@ static int run_client() {
 }
 
 static int run_server() {
+    /* Up the interface */
+    up_interface();
+
     /* Buffer for requests and responses */
     char buffer[1500 + 1 + crypto_stream_chacha20_NONCEBYTES];
 
-    /* Waitin g for requests */
-receive_request:
-    sockaddr_in from;
-    int response_size = main_socket.Receive(buffer, &from);
+    /* Start receiving requests */
+    for (;;) {
+        sockaddr_in from;
+        int response_size = main_socket.Receive(buffer, &from);
 
-    /* If there is an error */
-    if (response_size == -1) goto receive_request;
+        /* If there is an error */
+        if (response_size == -1) continue;
 
-    up_interface();
+        Server::HandlePackage(buffer);
+    }
+
     return -1;
 }
 
