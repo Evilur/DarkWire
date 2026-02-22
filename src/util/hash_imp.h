@@ -38,7 +38,6 @@ inline unsigned long hash(const char* const& element) noexcept {
 }
 
 template <>
-inline unsigned long hash(char* const& element) noexcept {
-    return calculate((const unsigned char*)(void*)element,
-                     strlen(element) + 1);
+inline unsigned long hash(const String& element) noexcept {
+    return ::hash((const char*)element);
 }
