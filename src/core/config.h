@@ -1,8 +1,8 @@
 #pragma once
 
 #include "container/linked_list.h"
-#include "type/string.h"
 #include "util/class.h"
+#include <sodium.h>
 
 class Config final {
 public:
@@ -61,5 +61,5 @@ public:
         static inline Parameter endpoint = "";
     };
 
-    static inline LinkedList<String>* peers = nullptr;
+    static inline LinkedList<unsigned char*>* peers = nullptr;
 };

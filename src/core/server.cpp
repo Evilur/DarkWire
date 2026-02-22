@@ -1,8 +1,11 @@
 #include "server.h"
+#include "core/config.h"
 #include "main.h"
 #include "package/package_type.h"
 #include "util/hkdf.h"
 #include "util/logger.h"
+
+#include <cstring>
 
 void Server::HandlePackage(const char* const buffer,
                            const sockaddr_in& client) {
@@ -14,8 +17,7 @@ void Server::HandlePackage(const char* const buffer,
     /* Handle the package by its type */
 #define COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(T)                                  \
     {                                                                         \
-        const void* data = buffer;                                            \
-        T* request = new T(*(const T*)data);                                  \
+        T* request = new T(*(const T*)(const void*)buffer);                   \
         Handle##T(request, client);                                           \
     }
 
@@ -24,9 +26,13 @@ void Server::HandlePackage(const char* const buffer,
 }
 
 void Server::HandleServerHandshakeRequest(
-    const ServerHandshakeRequest* const request,
+    const UniqPtr<ServerHandshakeRequest> request,
     const sockaddr_in client
 ) noexcept {
+    INFO_LOG("Recieve the handshake request from %s:%hu",
+             inet_ntoa(client.sin_addr),
+             ntohs(client.sin_port));
+
     /* Buffer for the chained key */
     unsigned char chain_key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
 
@@ -37,7 +43,8 @@ void Server::HandleServerHandshakeRequest(
         if (crypto_scalarmult(shared,
                               static_keys->Secret(),
                               request->header.ephemeral_public_key) == -1) {
-            ERROR_LOG("crypto_scalarmult: Failed to compute the shared secret");
+            ERROR_LOG("crypto_scalarmult: "
+                      "Failed to compute the shared secret");
             return;
         }
 
@@ -62,8 +69,41 @@ void Server::HandleServerHandshakeRequest(
         };
     }
 
-    /* Check the client */
+    /* Check the client's key */
     {
+        /* Try to find such a static key in the allowed peers linked list */
+        bool is_allowed = false;
+        for (const unsigned char* public_key : *Config::peers)
+            if (memcmp(request->payload.static_public_key,
+                       public_key,
+                       crypto_scalarmult_BYTES) == 0)
+                is_allowed = true;
+        if (!is_allowed) {
+            WARN_LOG("The client is not in the allowed list");
+            return;
+        }
+    }
 
+    /* Check the timestamp */
+    {
+        /* Get the current time */
+        unsigned long current_time = (unsigned long)std::time(nullptr);
+        unsigned long client_timestamp = request->payload.timestamp;
+
+        /* Get the delta time */
+        unsigned long delta_time = current_time > client_timestamp
+                                 ? current_time - client_timestamp
+                                 : client_timestamp - current_time;
+
+        /* If the time delta is too big */
+        if (delta_time > 120) return;
+
+        /* If there is already such a timestamp for that key */
+        /* !!!TODO!!! */
+    }
+
+    /* Handle the local ip address */
+    {
+        /* !!!TODO!!! */
     }
 }

@@ -216,9 +216,18 @@ static int handle_config(const char* const name) {
 
         /* If there is a 'Peers' section */
         if (strcmp(current_section, "Peers") == 0) {
+            /* If the linked list for peers is nulptr yet */
             if (Config::peers == nullptr)
-                Config::peers = new LinkedList<String>();
-            Config::peers->Push(line_buffer);
+                Config::peers = new LinkedList<unsigned char*>();
+
+            /* Decode and save the base64 */
+            unsigned char* public_key =
+                new unsigned char[crypto_scalarmult_BYTES];
+            sodium_base642bin(public_key, crypto_scalarmult_BYTES,
+                              line_ptr, strlen(line_ptr),
+                              nullptr, nullptr, nullptr,
+                              sodium_base64_VARIANT_ORIGINAL);
+            Config::peers->Push(public_key);
             continue;
         }
 
