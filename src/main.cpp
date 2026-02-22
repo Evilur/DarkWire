@@ -92,7 +92,7 @@ static int genkey() {
         crypto_scalarmult_BYTES,
         sodium_base64_VARIANT_ORIGINAL
     );
-    char* const base64_buffer = new char[base64_size + 1];
+    UniqPtr<char[]> base64_buffer = new char[base64_size + 1];
     base64_buffer[base64_size] = '\0';
 
     /* Convert the secret key to the base64 form */
@@ -101,7 +101,7 @@ static int genkey() {
                       sodium_base64_VARIANT_ORIGINAL);
 
     /* Print the base64 secret key representation */
-    printf("Secret key: %s\n", base64_buffer);
+    printf("Secret key: %s\n", base64_buffer.Get());
 
     /* Convert the public key to the base64 form */
     sodium_bin2base64(base64_buffer, base64_size,
@@ -109,10 +109,9 @@ static int genkey() {
                       sodium_base64_VARIANT_ORIGINAL);
 
     /* Print the base64 public key representation */
-    printf("Public key: %s\n", base64_buffer);
+    printf("Public key: %s\n", base64_buffer.Get());
 
     /* Return the success code */
-    delete[] base64_buffer;
     return 0;
 }
 
@@ -122,12 +121,12 @@ static int pubkey() {
         crypto_scalarmult_BYTES,
         sodium_base64_VARIANT_ORIGINAL
     );
-    char* const base64_buffer = new char[base64_size + 1];
+    UniqPtr<char[]> base64_buffer = new char[base64_size + 1];
     base64_buffer[base64_size] = '\0';
 
     /* Read the STDIN */
     if (ISATTY(FILENO(stdin))) printf("Enter the secret key: ");
-    if (fgets((char*)base64_buffer, (int)base64_size, stdin) == nullptr) {
+    if (fgets(base64_buffer, (int)base64_size, stdin) == nullptr) {
         FATAL_LOG("Failed to read the STDIN");
         return -1;
     }
@@ -141,10 +140,9 @@ static int pubkey() {
                       sodium_base64_VARIANT_ORIGINAL);
 
     /* Print the base64 public key representation */
-    printf("%s\n", base64_buffer);
+    printf("%s\n", base64_buffer.Get());
 
     /* Return the success code */
-    delete[] base64_buffer;
     return 0;
 }
 
