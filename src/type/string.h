@@ -26,7 +26,11 @@ public:
 
     bool operator==(const String& other) const noexcept;
 
+    bool operator==(const char* other) const noexcept;
+
     bool operator!=(const String& other) const noexcept;
+
+    bool operator!=(const char* other) const noexcept;
 
     operator const char*() const noexcept;
 
