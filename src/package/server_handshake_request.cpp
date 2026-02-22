@@ -4,9 +4,9 @@
 #include <cstring>
 #include <ctime>
 
-void ServerHandshakeRequest::Fill(const unsigned char* const epk,
-                                  const unsigned char* const spk,
-                                  const char* const address) {
+ServerHandshakeRequest::ServerHandshakeRequest(const unsigned char* const epk,
+                                               const unsigned char* const spk,
+                                               const char* const address) {
     /* Set the type */
     header.type = SERVER_HANDSHAKE_REQUEST;
 

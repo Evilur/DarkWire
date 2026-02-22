@@ -324,18 +324,20 @@ static int run_server() {
     /* Up the interface */
     up_interface();
 
-    /* Buffer for requests and responses */
-    char buffer[1500 + 1 + crypto_stream_chacha20_NONCEBYTES];
-
     /* Start receiving requests */
     for (;;) {
+        /* Buffer for requests and responses */
+        char buffer[1500 + 1 + crypto_stream_chacha20_NONCEBYTES];
+
+        /* Recieve the request from a client */
         sockaddr_in from;
         int response_size = main_socket.Receive(buffer, &from);
 
         /* If there is an error */
         if (response_size == -1) continue;
 
-        Server::HandlePackage(buffer);
+        /* Handle the package */
+        Server::HandlePackage(buffer, from);
     }
 
     return -1;

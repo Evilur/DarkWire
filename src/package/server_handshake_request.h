@@ -18,7 +18,7 @@ struct ServerHandshakeRequest final {
     } __attribute__((packed)) payload;
     unsigned char poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
-    void Fill(const unsigned char* epk,
-              const unsigned char* spk,
-              const char* address);
+    ServerHandshakeRequest(const unsigned char* epk,
+                           const unsigned char* spk,
+                           const char* address);
 } __attribute__((packed));

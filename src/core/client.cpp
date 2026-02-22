@@ -22,11 +22,11 @@ send_request:
         const Keys ephemeral_keys;
 
         /* Fill the reuqest */
-        ServerHandshakeRequest* request =
-            (ServerHandshakeRequest*)(void*)(buffer);
-        request->Fill(ephemeral_keys.Public(),
-                      static_keys->Public(),
-                      (const char*)Config::Interface::address);
+        ServerHandshakeRequest* request = new (buffer) ServerHandshakeRequest(
+            ephemeral_keys.Public(),
+            static_keys->Public(),
+            (const char*)Config::Interface::address
+        );
 
         /* Compute the first shared secret */
         unsigned char shared[crypto_scalarmult_BYTES];
