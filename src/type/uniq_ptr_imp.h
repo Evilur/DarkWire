@@ -42,15 +42,30 @@ T* UniqPtrBase<T, D>::Get() noexcept { return _ptr; }
 
 template<typename T, deleter<T> D>
 const T* UniqPtrBase<T, D>::Get() const noexcept { return _ptr; }
-
-template<typename T, deleter<T> D>
-T* UniqPtrBase<T, D>::operator->() noexcept { return _ptr; }
-
-template<typename T, deleter<T> D>
-const T* UniqPtrBase<T, D>::operator->() const noexcept { return _ptr; }
-
 template<typename T, deleter<T> D>
 T& UniqPtrBase<T, D>::operator*() noexcept { return *_ptr; }
 
 template<typename T, deleter<T> D>
 const T& UniqPtrBase<T, D>::operator*() const noexcept { return *_ptr; }
+
+template<typename T, deleter<T> D>
+UniqPtrBase<T, D>::operator T*() noexcept { return _ptr; }
+
+template<typename T, deleter<T> D>
+UniqPtrBase<T, D>::operator const T*() const noexcept { return _ptr; }
+
+template<typename T>
+T* UniqPtr<T>::operator->() noexcept { return this->_ptr; }
+
+template<typename T>
+const T* UniqPtr<T>::operator->() const noexcept { return this->_ptr; }
+
+template<typename T>
+T& UniqPtr<T[]>::operator[](const unsigned long index) noexcept {
+    return this->_ptr[index];
+}
+
+template<typename T>
+const T& UniqPtr<T[]>::operator[](const unsigned long index) const noexcept {
+    return this->_ptr[index];
+}

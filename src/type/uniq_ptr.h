@@ -32,26 +32,36 @@ public:
 
     const T* Get() const noexcept;
 
-    T* operator->() noexcept;
-
-    const T* operator->() const noexcept;
-
     T& operator*() noexcept;
 
     const T& operator*() const noexcept;
 
-private:
+    operator T*() noexcept;
+
+    operator const T*() const noexcept;
+
+protected:
     T* _ptr = nullptr;
 };
 
 template <typename T>
 class UniqPtr final : public UniqPtrBase<T, delete_object> {
+public:
     using UniqPtrBase<T, delete_object>::UniqPtrBase;
+
+    T* operator->() noexcept;
+
+    const T* operator->() const noexcept;
 };
 
 template <typename T>
 class UniqPtr<T[]> final : public UniqPtrBase<T, delete_array> {
+public:
     using UniqPtrBase<T, delete_array>::UniqPtrBase;
+
+    T& operator[](unsigned long index) noexcept;
+
+    const T& operator[](unsigned long index) const noexcept;
 };
 
 #include "uniq_ptr_imp.h"
