@@ -1,15 +1,20 @@
 #pragma once
 
 #include "util/class.h"
+#include "package/server_handshake_request.h"
 
 /**
  * Static class for server only methods
  * @author Evilur <the.evilur@gmail.com>
  */
-class Client final {
+class Server final {
 public:
-    PREVENT_INSTANTIATION(Client);
+    PREVENT_INSTANTIATION(Server);
 
-    [[nodiscard]]
-    static bool HandlePackage(char* buffer) noexcept;
+    static void HandlePackage(const char* buffer) noexcept;
+
+private:
+    static void HandleServerHandshakeRequest(
+        const ServerHandshakeRequest* request
+    ) noexcept;
 };
