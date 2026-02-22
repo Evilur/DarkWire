@@ -25,8 +25,7 @@ send_request:
         ServerHandshakeRequest* request =
             (ServerHandshakeRequest*)(void*)(buffer);
         request->Fill(ephemeral_keys.Public(),
-                      //static_keys->Public(),
-                      (const unsigned char*)"PENIS",
+                      static_keys->Public(),
                       (const char*)Config::Interface::address);
 
         /* Compute the first shared secret */
