@@ -60,6 +60,4 @@ public:
         static inline Parameter public_key = "";
         static inline Parameter endpoint = "";
     };
-
-    static inline LinkedList<unsigned char*>* peers = nullptr;
 };

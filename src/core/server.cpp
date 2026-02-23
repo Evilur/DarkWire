@@ -1,11 +1,25 @@
 #include "server.h"
-#include "core/config.h"
 #include "main.h"
 #include "package/package_type.h"
 #include "util/hkdf.h"
 #include "util/logger.h"
 
 #include <cstring>
+
+void Server::SavePeer(const unsigned char* const public_key) {
+    /* If the peers list isn't defined yet */
+    if (_peers == nullptr) {
+        /* Allocate the memory for the peers list */
+        _peers = new LinkedList<const unsigned char*>();
+
+        /* Set the program mode */
+        mode = SERVER;
+    }
+
+    /* Push the peer to the list, and increment the counter */
+    _peers->Push(public_key);
+    ++_peers_number;
+}
 
 void Server::HandlePackage(const char* const buffer,
                            const sockaddr_in& client) {
@@ -73,7 +87,7 @@ void Server::HandleServerHandshakeRequest(
     {
         /* Try to find such a static key in the allowed peers linked list */
         bool is_allowed = false;
-        for (const unsigned char* public_key : *Config::peers)
+        for (const unsigned char* public_key : *_peers)
             if (memcmp(request->payload.static_public_key,
                        public_key,
                        crypto_scalarmult_BYTES) == 0)

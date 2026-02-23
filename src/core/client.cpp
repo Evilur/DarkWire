@@ -6,6 +6,16 @@
 #include "util/hkdf.h"
 #include "util/logger.h"
 
+void Client::SaveServer(const sockaddr_in& address,
+                       const char* const public_key_base64) {
+    Server::address = sockaddr_in(address);
+    Server::public_key = new unsigned char[crypto_scalarmult_BYTES];
+    sodium_base642bin(Server::public_key, crypto_scalarmult_BYTES,
+                      public_key_base64, strlen(public_key_base64),
+                      nullptr, nullptr, nullptr,
+                      sodium_base64_VARIANT_ORIGINAL);
+}
+
 void Client::PerformHandshakeWithServer() noexcept {
     /* Buffer for requests and responses */
     char buffer[1500];
@@ -32,7 +42,7 @@ send_request:
         unsigned char shared[crypto_scalarmult_BYTES];
         if (crypto_scalarmult(shared,
                               ephemeral_keys.Secret(),
-                              server_public_key) == -1) {
+                              Server::public_key) == -1) {
             ERROR_LOG("crypto_scalarmult: Failed to compute the shared secret");
             goto send_request;
         }
@@ -55,7 +65,8 @@ send_request:
         );
 
         /* Send the crypted message */
-        main_socket.Send(buffer, sizeof(ServerHandshakeRequest), server);
+        main_socket.Send(buffer, sizeof(ServerHandshakeRequest),
+                         Server::address);
     }
 
     /* Try to the get a server response */
@@ -68,7 +79,7 @@ receive_response:
         if (response_size == -1) goto send_request;
 
         /* If there is a package not from the server */
-        if (!equal(from, server)) goto receive_response;
+        if (!equal(from, Server::address)) goto receive_response;
 
         /* If all is OK, handle the response */
         INFO_LOG("The response has been received from the server");

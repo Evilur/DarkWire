@@ -1,33 +1,21 @@
 #pragma once
 
+#include "socket/udp_socket.h"
 #include "core/keys.h"
 #include "core/tun.h"
-#include "socket/udp_socket.h"
 #include "type/string.h"
 
-#include <sodium.h>
+enum Mode : char { CLIENT, SERVER };
 
-#ifdef _WIN32
-    #include <io.h>
-    #define ISATTY _isatty
-    #define FILENO _fileno
-#else
-    #include <unistd.h>
-    #define ISATTY isatty
-    #define FILENO fileno
-#endif
+extern Mode mode;
 
-inline String interface_name = "";
+extern String interface_name;
 
-inline sockaddr_in server;
+extern const UDPSocket main_socket;
 
-inline unsigned char server_public_key[crypto_scalarmult_BYTES];
+extern const Keys* static_keys;
 
-inline const TUN* tun = nullptr;
-
-inline const UDPSocket main_socket;
-
-inline const Keys* static_keys = nullptr;
+extern const TUN* tun;
 
 static void on_terminate();
 

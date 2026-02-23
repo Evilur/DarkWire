@@ -1,7 +1,11 @@
 #include "core/client.h"
 #include "core/config.h"
+#include "core/keys.h"
 #include "core/server.h"
+#include "core/tun.h"
 #include "main.h"
+#include "socket/udp_socket.h"
+#include "type/string.h"
 #include "util/logger.h"
 #include "util/path.h"
 #include "util/system.h"
@@ -10,6 +14,27 @@
 #include <cstring>
 #include <exception>
 #include <fstream>
+#include <sodium.h>
+
+#ifdef _WIN32
+    #include <io.h>
+    #define ISATTY _isatty
+    #define FILENO _fileno
+#else
+    #include <unistd.h>
+    #define ISATTY isatty
+    #define FILENO fileno
+#endif
+
+Mode mode = CLIENT;
+
+String interface_name(0UL);
+
+const UDPSocket main_socket;
+
+const Keys* static_keys = nullptr;
+
+const TUN* tun = nullptr;
 
 int main(const int argc, const char* const* const argv) {
     /* Bind the 'on_terminate' handler */
@@ -38,7 +63,7 @@ int main(const int argc, const char* const* const argv) {
     if (handle_config(arg) == -1) return -1;
 
     /* If there is a client */
-    if (Config::peers == nullptr) return run_client();
+    if (mode == CLIENT) return run_client();
 
     /* If there is a server */
     return run_server();
@@ -214,10 +239,6 @@ static int handle_config(const char* const name) {
 
         /* If there is a 'Peers' section */
         if (strcmp(current_section, "Peers") == 0) {
-            /* If the linked list for peers is nulptr yet */
-            if (Config::peers == nullptr)
-                Config::peers = new LinkedList<unsigned char*>();
-
             /* Decode and save the base64 */
             unsigned char* public_key =
                 new unsigned char[crypto_scalarmult_BYTES];
@@ -225,7 +246,7 @@ static int handle_config(const char* const name) {
                               line_ptr, strlen(line_ptr),
                               nullptr, nullptr, nullptr,
                               sodium_base64_VARIANT_ORIGINAL);
-            Config::peers->Push(public_key);
+            Server::SavePeer(public_key);
             continue;
         }
 
@@ -245,6 +266,7 @@ static int handle_config(const char* const name) {
         strcpy(parameter_value, parameter_value_ptr);
 
         /* Save the parameter */
+        TRACE_LOG("%s = %s", parameter_key, parameter_value);
         if (strcmp(current_section, "Interface") == 0) {
             if (strcmp(parameter_key, "PrivateKey") == 0)
                 Config::Interface::private_key = parameter_value;
@@ -279,14 +301,6 @@ static int handle_config(const char* const name) {
     /* Save the keys pair */
     static_keys = new Keys((const char*)Config::Interface::private_key);
 
-    /* Save the server public key */
-    const char* server_public_key_ptr =
-        (const char*)Config::Server::public_key;
-    sodium_base642bin(server_public_key, crypto_scalarmult_BYTES,
-                      server_public_key_ptr, strlen(server_public_key_ptr),
-                      nullptr, nullptr, nullptr,
-                      sodium_base64_VARIANT_ORIGINAL);
-
     /* Init the main socket for all future connections */
     main_socket.Bind({
         .sin_family = AF_INET,
@@ -312,11 +326,12 @@ static int run_client() {
 #endif
     main_socket.SetOption(SO_RCVTIMEO, &time, sizeof(time));
 
-    /* Save the server address */
+    /* Save the server */
     {
         char buffer[] = "255.255.255.255:65535";
         strcpy(buffer, (const char*)Config::Server::endpoint);
-        server = UDPSocket::GetAddress(buffer);
+        Client::SaveServer(UDPSocket::GetAddress(buffer),
+                           (const char*)Config::Server::public_key);
     }
 
     /* Perform the handshake with the server */
