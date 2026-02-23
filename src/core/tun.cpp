@@ -1,6 +1,7 @@
 #include "tun.h"
 #include "core/config.h"
 #include "exception/tun_error.h"
+#include "util/logger.h"
 #include "util/system.h"
 
 #include <cstring>
@@ -23,8 +24,11 @@ TUN::TUN(const char* const name) : _tun_name(name),
     strncpy(ifr.ifr_name, name, IFNAMSIZ);
 
     /* Create a new network interface */
-    if (ioctl(_tun_fd, TUNSETIFF, (void*)&ifr) == -1)
+    if (ioctl(_tun_fd, TUNSETIFF, (void*)&ifr) == -1) {
+        FATAL_LOG("Failed to create the virtual interface\n"
+                  "Do you have enough permissions?");
         throw TunError("Ioctl TUNSETIFF failed");
+    }
 
     /* IF all is OK */
     System::Exec(String::Format("sysctl -w net.ipv6.conf.%s.disable_ipv6=1",
