@@ -336,6 +336,9 @@ static int run_server() {
     /* Up the interface */
     up_interface();
 
+    /* Init the server */
+    Server::Init();
+
     /* Start receiving requests */
     for (;;) {
         /* Buffer for requests and responses */

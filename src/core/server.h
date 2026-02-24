@@ -1,7 +1,8 @@
 #pragma once
 
-#include "container/linked_list.h"
+#include "type/dictionary.h"
 #include "package/server_handshake_request.h"
+#include "type/linked_list.h"
 #include "type/uniq_ptr_imp.h"
 #include "util/class.h"
 
@@ -17,12 +18,18 @@ public:
 
     static void SavePeer(const unsigned char* public_key);
 
+    static void Init();
+
     static void HandlePackage(const char* buffer, const sockaddr_in& client);
 
 private:
-    static inline LinkedList<const unsigned char*>* _peers = nullptr;
-
-    static inline unsigned int _peers_number = 0;
+    struct Peers {
+        static inline LinkedList<const unsigned char*>* public_keys = nullptr;
+        static inline unsigned int number = 0;
+        static inline Dictionary<const unsigned char*,
+                                 unsigned long,
+                                 unsigned int>* timestamps = nullptr;
+    };
 
     static void HandleServerHandshakeRequest(
         UniqPtr<ServerHandshakeRequest> request,

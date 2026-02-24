@@ -9,17 +9,28 @@
 
 void Server::SavePeer(const unsigned char* const public_key) {
     /* If the peers list isn't defined yet */
-    if (_peers == nullptr) {
+    if (Peers::public_keys == nullptr) {
         /* Allocate the memory for the peers list */
-        _peers = new LinkedList<const unsigned char*>();
+        Peers::public_keys = new LinkedList<const unsigned char*>();
 
         /* Set the program mode */
         mode = SERVER;
     }
 
     /* Push the peer to the list, and increment the counter */
-    _peers->Push(public_key);
-    ++_peers_number;
+    Peers::public_keys->Push(public_key);
+    ++Peers::number;
+}
+
+void Server::Init() {
+    /* Allocate the memory for the 'peer -> timestamp' dictioary */
+    Peers::timestamps = new Dictionary<const unsigned char*,
+                                       unsigned long,
+                                       unsigned int>(Peers::number);
+
+    /* Fill timestamps dictioary with zeros */
+    for (const unsigned char* public_key : *Peers::public_keys)
+        Peers::timestamps->Put(public_key, 0UL);
 }
 
 void Server::HandlePackage(const char* const buffer,
@@ -88,7 +99,7 @@ void Server::HandleServerHandshakeRequest(
     {
         /* Try to find such a static key in the allowed peers linked list */
         bool is_allowed = false;
-        for (const unsigned char* public_key : *_peers)
+        for (const unsigned char* public_key : *Peers::public_keys)
             if (memcmp(request->payload.static_public_key,
                        public_key,
                        crypto_scalarmult_BYTES) == 0)
@@ -113,8 +124,8 @@ void Server::HandleServerHandshakeRequest(
         /* If the time delta is too big */
         if (delta_time > 120) return;
 
-        /* If there is already such a timestamp for that key */
-        /* !!!TODO!!! */
+        /* Compare current timestamp with the last one */
+
     }
 
     /* Handle the local ip address */

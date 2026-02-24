@@ -8,8 +8,9 @@
  * @author Evilur <the.evilur@gmail.com>
  * @tparam K Key typename
  * @tparam T Element typename
+ * @tparam S Size typename
  */
-template <typename K, typename T>
+template <typename K, typename T, typename S = unsigned short>
 class Dictionary final {
 struct Node;
 public:
@@ -18,7 +19,7 @@ public:
     /**
      * @param capacity Maximum number of elements without resizing
      */
-    explicit Dictionary(unsigned short capacity) noexcept;
+    explicit Dictionary(S capacity) noexcept;
 
     /**
      * Free the memory
@@ -67,8 +68,8 @@ public:
      */
     class Iterator {
     public:
-        explicit Iterator(unsigned short index,
-                          unsigned short capacity,
+        explicit Iterator(S index,
+                          S capacity,
                           const LinkedList<Node>* lists,
                           LinkedList<Node>::Iterator iterator) noexcept;
 
@@ -84,11 +85,11 @@ public:
         /**
          * Index of the current bucket in the hash table
          */
-        unsigned short _index;
+        S _index;
         /**
          * Total number of buckets in the hash table
          */
-        const unsigned short _capacity;
+        const S _capacity;
         /**
          * Pointer to the array of linked lists (buckets)
          * that make up the hash table
@@ -130,7 +131,7 @@ private:
     /**
      * A size of the array with linked lists
      */
-    const unsigned short _capacity;
+    const S _capacity;
 };
 
 #include "dictionary_imp.h"

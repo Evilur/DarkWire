@@ -1,5 +1,5 @@
 #include "dictionary.h"
-#include "container/dictionary.h"
+#include "type/dictionary.h"
 
 #include "../core/unit_test.h"
 

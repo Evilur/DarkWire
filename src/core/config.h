@@ -1,6 +1,6 @@
 #pragma once
 
-#include "container/linked_list.h"
+#include "type/linked_list.h"
 #include "util/class.h"
 #include <sodium.h>
 

@@ -1,5 +1,5 @@
 #include "../core/unit_test.h"
-#include "container/linked_list.h"
+#include "type/linked_list.h"
 
 static void fill_list(LinkedList<int>& list);
 

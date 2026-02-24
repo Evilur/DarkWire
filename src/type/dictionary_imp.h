@@ -4,17 +4,17 @@
 #include "util/equal.h"
 #include "util/hash.h"
 
-template <typename K, typename T>
-Dictionary<K, T>::Dictionary(const unsigned short capacity) noexcept :
+template <typename K, typename T, typename S>
+Dictionary<K, T, S>::Dictionary(const S capacity) noexcept :
         _buckets(new LinkedList<Node>[capacity]), _capacity(capacity) { }
 
-template <typename K, typename T>
-Dictionary<K, T>::~Dictionary() noexcept { delete[] _buckets; }
+template <typename K, typename T, typename S>
+Dictionary<K, T, S>::~Dictionary() noexcept { delete[] _buckets; }
 
-template <typename K, typename T>
-void Dictionary<K, T>::Put(const K& key, T element) {
+template <typename K, typename T, typename S>
+void Dictionary<K, T, S>::Put(const K& key, T element) {
     /* Calculate the key hash */
-    const unsigned short hash = ::hash(key) % _capacity;
+    const S hash = ::hash(key) % _capacity;
 
     /* Try to get the node from the linked list */
     for (const Node& node : _buckets[hash])
@@ -28,10 +28,10 @@ void Dictionary<K, T>::Put(const K& key, T element) {
     _buckets[hash].Push({ key, element });
 }
 
-template <typename K, typename T>
-T& Dictionary<K, T>::Get(const K& key) {
+template <typename K, typename T, typename S>
+T& Dictionary<K, T, S>::Get(const K& key) {
     /* Calculate the key hash */
-    const unsigned short hash = ::hash(key) % _capacity;
+    const S hash = ::hash(key) % _capacity;
 
     /* Try to get the node from the linked list */
     for (Node& node : _buckets[hash])
@@ -42,10 +42,10 @@ T& Dictionary<K, T>::Get(const K& key) {
     throw std::runtime_error("Dictionary::Get() no such an element");
 }
 
-template <typename K, typename T>
-const T& Dictionary<K, T>::Get(const K& key) const {
+template <typename K, typename T, typename S>
+const T& Dictionary<K, T, S>::Get(const K& key) const {
     /* Calculate the key hash */
-    const unsigned short hash = ::hash(key) % _capacity;
+    const S hash = ::hash(key) % _capacity;
 
     /* Try to get the node from the linked list */
     for (const Node& node : _buckets[hash])
@@ -56,10 +56,10 @@ const T& Dictionary<K, T>::Get(const K& key) const {
     throw std::runtime_error("Dictionary::Get() no such an element");
 }
 
-template <typename K, typename T>
-bool Dictionary<K, T>::Has(const K& key) const noexcept {
+template <typename K, typename T, typename S>
+bool Dictionary<K, T, S>::Has(const K& key) const noexcept {
     /* Calculate the key hash */
-    const unsigned short hash = ::hash(key) % _capacity;
+    const S hash = ::hash(key) % _capacity;
 
     /* Try to get the node from the linked list */
     for (const Node& node : _buckets[hash])
@@ -70,10 +70,10 @@ bool Dictionary<K, T>::Has(const K& key) const noexcept {
     return false;
 }
 
-template <typename K, typename T>
-void Dictionary<K, T>::Delete(const K& key) {
+template <typename K, typename T, typename S>
+void Dictionary<K, T, S>::Delete(const K& key) {
     /* Calculate the key hash */
-    const unsigned short hash = ::hash(key) % _capacity;
+    const S hash = ::hash(key) % _capacity;
 
     /* Try to get the node from the linked list */
     short index = 0;
@@ -94,10 +94,10 @@ void Dictionary<K, T>::Delete(const K& key) {
     _buckets[hash].Remove(index);
 }
 
-template <typename K, typename T>
-Dictionary<K, T>::Iterator Dictionary<K, T>::begin() const noexcept {
+template <typename K, typename T, typename S>
+Dictionary<K, T, S>::Iterator Dictionary<K, T, S>::begin() const noexcept {
     /* Iterate over all buckets */
-    for (unsigned short i = 0; i < _capacity; ++i)
+    for (S i = 0; i < _capacity; ++i)
         /* If the current bucket is not empty,
          * return iterator to its first element */
         if (_buckets[i].begin() != _buckets[i].end())
@@ -107,25 +107,25 @@ Dictionary<K, T>::Iterator Dictionary<K, T>::begin() const noexcept {
     return end();
 }
 
-template <typename K, typename T>
-Dictionary<K, T>::Iterator Dictionary<K, T>::end() const noexcept {
+template <typename K, typename T, typename S>
+Dictionary<K, T, S>::Iterator Dictionary<K, T, S>::end() const noexcept {
     /* Construct an iterator representing the end position:
      * index == capacity and internal list iterator == nullptr */
     return Iterator(_capacity, _capacity, _buckets,
                     typename LinkedList<Node>::Iterator(nullptr));
 }
 
-template <typename K, typename T>
-Dictionary<K, T>::Iterator::Iterator(
-    const unsigned short index,
-    const unsigned short capacity,
+template <typename K, typename T, typename S>
+Dictionary<K, T, S>::Iterator::Iterator(
+    const S index,
+    const S capacity,
     const LinkedList<Node>* const lists,
     const typename LinkedList<Node>::Iterator iterator
 ) noexcept : _index(index), _capacity(capacity),
              _buckets(lists), _iterator(iterator) { }
 
-template <typename K, typename T>
-bool Dictionary<K, T>::
+template <typename K, typename T, typename S>
+bool Dictionary<K, T, S>::
 Iterator::operator!=(const Iterator& other) const noexcept {
     /* If both iterators are "end" iterators, they are equal */
     if (_index == _capacity && other._index == other._capacity) return false;
@@ -137,17 +137,17 @@ Iterator::operator!=(const Iterator& other) const noexcept {
     return _iterator != other._iterator;
 }
 
-template <typename K, typename T>
-Dictionary<K, T>::Node&
-Dictionary<K, T>::Iterator::operator*() noexcept { return *_iterator; }
+template <typename K, typename T, typename S>
+Dictionary<K, T, S>::Node&
+Dictionary<K, T, S>::Iterator::operator*() noexcept { return *_iterator; }
 
-template <typename K, typename T>
-const Dictionary<K, T>::Node&
-Dictionary<K, T>::Iterator::operator*() const noexcept { return *_iterator; }
+template <typename K, typename T, typename S>
+const Dictionary<K, T, S>::Node&
+Dictionary<K, T, S>::Iterator::operator*() const noexcept { return *_iterator; }
 
-template <typename K, typename T>
-Dictionary<K, T>::Iterator&
-Dictionary<K, T>::Iterator::operator++() noexcept {
+template <typename K, typename T, typename S>
+Dictionary<K, T, S>::Iterator&
+Dictionary<K, T, S>::Iterator::operator++() noexcept {
     /* If iterator is already at end(), do nothing */
     if (_index == _capacity) return *this;
 
