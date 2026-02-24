@@ -24,11 +24,16 @@ public:
 
 private:
     struct Peers {
+        struct Details {
+            unsigned long last_timestamp;
+            unsigned int ip;
+        } __attribute__((aligned(16)));
+
         static inline LinkedList<const unsigned char*>* public_keys = nullptr;
         static inline unsigned int number = 0;
-        static inline Dictionary<const unsigned char*,
-                                 unsigned long,
-                                 unsigned int>* timestamps = nullptr;
+        static inline Dictionary<KeyBuffer,
+                                 Details,
+                                 unsigned int>* details = nullptr;
     };
 
     static void HandleServerHandshakeRequest(

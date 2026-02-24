@@ -23,14 +23,17 @@ void Server::SavePeer(const unsigned char* const public_key) {
 }
 
 void Server::Init() {
-    /* Allocate the memory for the 'peer -> timestamp' dictioary */
-    Peers::timestamps = new Dictionary<const unsigned char*,
-                                       unsigned long,
-                                       unsigned int>(Peers::number);
+    /* Allocate the memory for the dictionary */
+    Peers::details = new Dictionary<KeyBuffer,
+                                    Peers::Details,
+                                    unsigned int>(Peers::number);
 
     /* Fill timestamps dictioary with zeros */
     for (const unsigned char* public_key : *Peers::public_keys)
-        Peers::timestamps->Put(public_key, 0UL);
+        Peers::details->Put(public_key, {
+            .last_timestamp = 0,
+            .ip = INADDR_ANY
+        });
 }
 
 void Server::HandlePackage(const char* const buffer,
@@ -124,12 +127,20 @@ void Server::HandleServerHandshakeRequest(
         /* If the time delta is too big */
         if (delta_time > 120) return;
 
-        /* Compare current timestamp with the last one */
+        /* Get the last client's timestamp */
+        unsigned long& last_timestamp = Peers::details->Get(
+            request->payload.static_public_key
+        ).last_timestamp;
 
+        /* Compare current timestamp with the last one */
+        if (client_timestamp <= last_timestamp) return;
+
+        /* If all is ok, update the last timestamp */
+        last_timestamp = client_timestamp;
     }
 
     /* Handle the local ip address */
     {
-        /* !!!TODO!!! */
+
     }
 }

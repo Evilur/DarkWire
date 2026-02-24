@@ -3,6 +3,7 @@
 #include "hash.h"
 
 #include <cstring>
+#include <sodium.h>
 #include <type_traits>
 
 static inline unsigned long calculate(const unsigned char* element,
@@ -39,4 +40,9 @@ inline unsigned long hash(const char* const& element) noexcept {
 template <>
 inline unsigned long hash(const String& element) noexcept {
     return ::hash((const char*)element);
+}
+
+template <>
+inline unsigned long hash(const KeyBuffer& element) noexcept {
+    return calculate(element.Get(), crypto_scalarmult_BYTES);
 }
