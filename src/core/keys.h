@@ -25,4 +25,12 @@ public:
 private:
     unsigned char _sk[crypto_scalarmult_SCALARBYTES];
     unsigned char _pk[crypto_scalarmult_BYTES];
+
+public:
+    static void SaveStatic(const Keys* keys);
+
+    static const Keys* GetStatic() noexcept;
+
+private:
+    static inline const Keys* _static_keys = nullptr;
 };

@@ -1,5 +1,6 @@
 #include "server.h"
-#include "main.h"
+#include "core/global.h"
+#include "core/keys.h"
 #include "package/package_type.h"
 #include "util/hkdf.h"
 #include "util/logger.h"
@@ -55,7 +56,7 @@ void Server::HandleServerHandshakeRequest(
         /* Compute the first shared secret */
         unsigned char shared[crypto_scalarmult_BYTES];
         if (crypto_scalarmult(shared,
-                              static_keys->Secret(),
+                              Keys::GetStatic()->Secret(),
                               request->header.ephemeral_public_key) == -1) {
             ERROR_LOG("crypto_scalarmult: "
                       "Failed to compute the shared secret");

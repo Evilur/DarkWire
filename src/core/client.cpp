@@ -1,6 +1,7 @@
 #include "client.h"
 #include "core/config.h"
-#include "main.h"
+#include "core/global.h"
+#include "core/keys.h"
 #include "package/server_handshake_request.h"
 #include "util/equal.h"
 #include "util/hkdf.h"
@@ -34,7 +35,7 @@ send_request:
         /* Fill the reuqest */
         ServerHandshakeRequest* request = new (buffer) ServerHandshakeRequest(
             ephemeral_keys.Public(),
-            static_keys->Public(),
+            Keys::GetStatic()->Public(),
             (const char*)Config::Interface::address
         );
 

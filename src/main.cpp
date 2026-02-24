@@ -1,8 +1,8 @@
 #include "core/client.h"
 #include "core/config.h"
+#include "core/global.h"
 #include "core/keys.h"
 #include "core/server.h"
-#include "core/tun.h"
 #include "main.h"
 #include "socket/udp_socket.h"
 #include "type/string.h"
@@ -25,16 +25,6 @@
     #define ISATTY isatty
     #define FILENO fileno
 #endif
-
-Mode mode = CLIENT;
-
-String interface_name(0UL);
-
-const UDPSocket main_socket;
-
-const Keys* static_keys = nullptr;
-
-const TUN* tun = nullptr;
 
 int main(const int argc, const char* const* const argv) {
     /* Bind the 'on_terminate' handler */
@@ -298,8 +288,8 @@ static int handle_config(const char* const name) {
         return -1;
     }
 
-    /* Save the keys pair */
-    static_keys = new Keys((const char*)Config::Interface::private_key);
+    /* Save the static keys pair */
+    Keys::SaveStatic(new Keys((const char*)Config::Interface::private_key));
 
     /* Init the main socket for all future connections */
     main_socket.Bind({
