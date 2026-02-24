@@ -2,6 +2,9 @@
 
 #include "type/string.h"
 
+static unsigned long calculate(const unsigned char* element,
+                               unsigned long size) noexcept;
+
 template <typename T>
 unsigned long hash(const T& element) noexcept;
 

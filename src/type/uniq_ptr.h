@@ -1,10 +1,10 @@
 #pragma once
 
 template <typename T>
-static inline void delete_object(T* obj);
+static inline void delete_object(T* obj) noexcept;
 
 template <typename T>
-static inline void delete_array(T* obj);
+static inline void delete_array(T* arr) noexcept;
 
 template <typename T>
 using deleter = void(*)(T*);
@@ -59,14 +59,9 @@ class UniqPtr<T[]> final : public UniqPtrBase<T, delete_array> {
 public:
     using UniqPtrBase<T, delete_array>::UniqPtrBase;
 
-    UniqPtr(T* ptr, unsigned long size) noexcept;
-
     T& operator[](unsigned long index) noexcept;
 
     const T& operator[](unsigned long index) const noexcept;
-
-private:
-    const unsigned long _size = 0;
 };
 
 #include "uniq_ptr_imp.h"
