@@ -24,15 +24,15 @@ void Server::SavePeer(const unsigned char* const public_key) {
 
 void Server::Init() {
     /* Allocate the memory for the dictionary */
-    Peers::details = new Dictionary<KeyBuffer,
+    Peers::peers = new Dictionary<KeyBuffer,
                                     Peers::Details,
                                     unsigned int>(Peers::number);
 
     /* Fill timestamps dictioary with zeros */
     for (const unsigned char* public_key : *Peers::public_keys)
-        Peers::details->Put(public_key, {
+        Peers::peers->Put(public_key, {
             .last_timestamp = 0,
-            .ip = INADDR_ANY
+            .local_ip = INADDR_ANY
         });
 }
 
@@ -113,6 +113,10 @@ void Server::HandleServerHandshakeRequest(
         }
     }
 
+    /* Get the peer from the dictionary */
+    Peers::Details& peer_details =
+        Peers::peers->Get(request->payload.static_public_key);
+
     /* Check the timestamp */
     {
         /* Get the current time */
@@ -127,20 +131,68 @@ void Server::HandleServerHandshakeRequest(
         /* If the time delta is too big */
         if (delta_time > 120) return;
 
-        /* Get the last client's timestamp */
-        unsigned long& last_timestamp = Peers::details->Get(
-            request->payload.static_public_key
-        ).last_timestamp;
-
         /* Compare current timestamp with the last one */
-        if (client_timestamp <= last_timestamp) return;
+        if (client_timestamp <= peer_details.last_timestamp) return;
 
         /* If all is ok, update the last timestamp */
-        last_timestamp = client_timestamp;
+        peer_details.last_timestamp = client_timestamp;
     }
 
-    /* Handle the local ip address */
+    /* Variables for the response (default is data from the request) */
+    unsigned int response_ip = request->payload.ip;
+    unsigned char response_netmask = request->payload.netmask;
+
+    /* Handle the local ip address and netmask */
     {
+        /* Get the passed ip and the netmask */
+        const unsigned int client_ip = response_ip;
+        const unsigned char client_netmask = response_netmask;
 
+        /* If there already an ip address passed */
+        if (client_ip != INADDR_ANY && client_netmask != 0) {
+            /* Go through all the peers in the dict */
+            bool is_busy = false;
+            for (const auto& [public_key, details] : *Peers::peers)
+                if (details.local_ip == client_ip) is_busy = true;
+
+            /* If the ip is busy, reset the connection */
+            if (is_busy) return;
+        /* If the user decide to get ip by the server */
+        } else {
+            /* Set the server's netmask to the response */
+            response_netmask = netmask;
+
+            /* Get the network and the broadcast addresses */
+            const unsigned int binmask = (netmask == 0) ? 0x0U : (netmask == 32)
+                                       ? 0xFFFFFFFFU : (~0U << (32U - netmask));
+            const unsigned int network = htonl(ntohl(ip_address) & binmask);
+            const unsigned int broadcast = network | htonl(~binmask);
+
+            /* Assemble the dictionary 'ip -> is busy?' */
+            Dictionary<unsigned int, bool, unsigned int>
+            busy_ips(Peers::number);
+            for (const auto& [public_key, details] : *Peers::peers)
+                if (details.local_ip != INADDR_ANY)
+                    busy_ips.Put(details.local_ip, true);
+            busy_ips.Put(ip_address, true);
+
+            /* Try to find the free ip in the server's local network */
+            const unsigned int start = ntohl(network);
+            const unsigned int end = ntohl(broadcast);
+            for (unsigned int ip = start + 1; ip < end; ++ip) {
+                const unsigned int htonl_ip = htonl(ip);
+                if (!busy_ips.Has(htonl_ip)) {
+                    response_ip = htonl_ip;
+                    break;
+                }
+            }
+
+            /* If there is no free ips, reset the connection */
+            if (response_ip == INADDR_ANY) return;
+        }
     }
+
+    /* If all is OK, update the peer */
+    peer_details.local_ip = response_ip;
+    peer_details.endpoint = client;
 }

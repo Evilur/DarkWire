@@ -1,5 +1,6 @@
 #include "tun.h"
 #include "core/config.h"
+#include "core/global.h"
 #include "exception/tun_error.h"
 #include "util/logger.h"
 #include "util/system.h"
@@ -33,9 +34,8 @@ TUN::TUN(const char* const name) : _tun_name(name),
     /* IF all is OK */
     System::Exec(String::Format("sysctl -w net.ipv6.conf.%s.disable_ipv6=1",
                                 name));
-    System::Exec(String::Format("ip addr add %s dev %s",
-                                (const char*)Config::Interface::address,
-                                name));
+    System::Exec(String::Format("ip addr add %s/%hhu dev %s",
+                                inet_ntoa({ ip_address }), netmask, name));
 }
 
 TUN::~TUN() noexcept { close(_tun_fd); }

@@ -298,6 +298,16 @@ static int handle_config(const char* const name) {
         .sin_addr = INADDR_ANY
     });
 
+    /* Set the local ip and netmask */
+    char address_buffer[] = "255.255.255.255/32";
+    strcpy(address_buffer, (const char*)Config::Interface::address);
+    char* address_buffer_sep = strchr(address_buffer, '/');
+    if (address_buffer_sep != nullptr) {
+        *address_buffer_sep = '\0';
+        ip_address = inet_addr(address_buffer);
+        netmask = (unsigned char)atoi(address_buffer_sep + 1);
+    }
+
     /* Set the tune name and return the success code */
     interface_name = config_path.stem().c_str();
     return 0;

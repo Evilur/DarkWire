@@ -26,14 +26,15 @@ private:
     struct Peers {
         struct Details {
             unsigned long last_timestamp;
-            unsigned int ip;
+            unsigned int local_ip;
+            sockaddr_in endpoint;
         } __attribute__((aligned(16)));
 
         static inline LinkedList<const unsigned char*>* public_keys = nullptr;
         static inline unsigned int number = 0;
         static inline Dictionary<KeyBuffer,
                                  Details,
-                                 unsigned int>* details = nullptr;
+                                 unsigned int>* peers = nullptr;
     };
 
     static void HandleServerHandshakeRequest(

@@ -32,12 +32,9 @@ send_request:
         /* Generate the ephemeral key pair */
         const Keys ephemeral_keys;
 
-        /* Fill the reuqest */
-        ServerHandshakeRequest* request = new (buffer) ServerHandshakeRequest(
-            ephemeral_keys.Public(),
-            static_keys->Public(),
-            (const char*)Config::Interface::address
-        );
+        /* Fill the request */
+        ServerHandshakeRequest* request =
+            new (buffer) ServerHandshakeRequest(ephemeral_keys.Public());
 
         /* Compute the first shared secret */
         unsigned char shared[crypto_scalarmult_BYTES];
