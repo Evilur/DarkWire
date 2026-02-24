@@ -56,7 +56,7 @@ void Server::HandleServerHandshakeRequest(
         /* Compute the first shared secret */
         unsigned char shared[crypto_scalarmult_BYTES];
         if (crypto_scalarmult(shared,
-                              Keys::GetStatic()->Secret(),
+                              static_keys->Secret(),
                               request->header.ephemeral_public_key) == -1) {
             ERROR_LOG("crypto_scalarmult: "
                       "Failed to compute the shared secret");

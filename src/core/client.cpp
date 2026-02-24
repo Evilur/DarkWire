@@ -35,7 +35,7 @@ send_request:
         /* Fill the reuqest */
         ServerHandshakeRequest* request = new (buffer) ServerHandshakeRequest(
             ephemeral_keys.Public(),
-            Keys::GetStatic()->Public(),
+            static_keys->Public(),
             (const char*)Config::Interface::address
         );
 

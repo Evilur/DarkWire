@@ -289,7 +289,7 @@ static int handle_config(const char* const name) {
     }
 
     /* Save the static keys pair */
-    Keys::SaveStatic(new Keys((const char*)Config::Interface::private_key));
+    static_keys = new Keys((const char*)Config::Interface::private_key);
 
     /* Init the main socket for all future connections */
     main_socket.Bind({

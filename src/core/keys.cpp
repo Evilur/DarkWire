@@ -26,11 +26,3 @@ Keys::Keys(const char* const base64_secret_key) noexcept {
 const unsigned char* Keys::Secret() const noexcept { return _sk; }
 
 const unsigned char* Keys::Public() const noexcept { return _pk; }
-
-void Keys::SaveStatic(const Keys* const keys) {
-    if (_static_keys != nullptr)
-        throw KeysError("Static keys already have been initialized");
-    _static_keys = keys;
-}
-
-const Keys* Keys::GetStatic() noexcept { return _static_keys; }
