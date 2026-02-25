@@ -1,11 +1,13 @@
 #include "server.h"
 #include "core/global.h"
 #include "core/keys.h"
+#include "package/handshake_response.h"
 #include "package/package_type.h"
 #include "util/hkdf.h"
 #include "util/logger.h"
 
 #include <cstring>
+#include <thread>
 
 void Server::SavePeer(const unsigned char* const public_key) {
     /* If the peers list isn't defined yet */
@@ -36,7 +38,7 @@ void Server::Init() {
         });
 }
 
-void Server::HandlePackage(const char* const buffer,
+void Server::HandlePackage(const char* const buffer, const int buffer_size,
                            const sockaddr_in& client) {
     /* Get the type of the package */
     const unsigned char raw_type = *(const unsigned char*)buffer;
@@ -47,7 +49,8 @@ void Server::HandlePackage(const char* const buffer,
 #define COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(T)                                  \
     {                                                                         \
         T* request = new T(*(const T*)(const void*)buffer);                   \
-        Handle##T(request, client);                                           \
+        if (buffer_size != sizeof(T)) return;                                 \
+        std::thread(&Handle##T, request, client).detach();                    \
     }
 
     if (type == HANDSHAKE_REQUEST)
@@ -195,4 +198,52 @@ void Server::HandleHandshakeRequest(
     /* If all is OK, update the peer */
     peer_details.local_ip = response_ip;
     peer_details.endpoint = client;
+
+    /* Generate the ephemeral keys pair */
+    Keys ephemeral_keys;
+
+    /* Compute the second shared secret and update the chain keys */
+    unsigned char shared[crypto_scalarmult_BYTES];
+    if (crypto_scalarmult(shared,
+                          ephemeral_keys.Secret(),
+                          request->header.ephemeral_public_key) == -1) {
+        ERROR_LOG("crypto_scalarmult: Failed to compute the shared secret");
+        return;
+    }
+    hkdf(chain_key, chain_key, shared);
+
+    /* Compute the third shared secret and update the chain keys */
+    if (crypto_scalarmult(shared,
+                          ephemeral_keys.Secret(),
+                          request->payload.static_public_key) == -1) {
+        ERROR_LOG("crypto_scalarmult: Failed to compute the shared secret");
+        return;
+    }
+    hkdf(chain_key, chain_key, shared);
+
+    /* Assemble the response */
+    Nonce nonce(request->header.nonce);
+    HandshakeResponse response(ephemeral_keys.Public(),
+                               nonce,
+                               response_ip,
+                               response_netmask);
+
+    /* Encrypt the resposne */
+    unsigned long long dummy_len;
+    crypto_aead_chacha20poly1305_ietf_encrypt(
+        (unsigned char*)(void*)&response.payload,
+        &dummy_len,
+        (unsigned char*)(void*)&response.payload,
+        sizeof(response.payload),
+        (unsigned char*)(void*)&response.header,
+        sizeof(response.header),
+        nullptr,
+        response.header.nonce,
+        chain_key
+    );
+
+    /* Send the response */
+    main_socket.Send((const char*)(const void*)&response,
+                     sizeof(HandshakeResponse),
+                     client);
 }

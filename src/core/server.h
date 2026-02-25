@@ -20,7 +20,8 @@ public:
 
     static void Init();
 
-    static void HandlePackage(const char* buffer, const sockaddr_in& client);
+    static void HandlePackage(const char* buffer, int buffer_size,
+                              const sockaddr_in& client);
 
 private:
     struct Peers {

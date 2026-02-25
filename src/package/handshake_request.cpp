@@ -5,18 +5,19 @@
 #include <cstring>
 #include <ctime>
 
-HandshakeRequest::HandshakeRequest(const unsigned char* const epk) {
+HandshakeRequest::HandshakeRequest(const unsigned char* const epk,
+                                   Nonce& nonce) noexcept {
     /* Set the type */
     header.type = HANDSHAKE_REQUEST;
-
-    /* Set the nonce */
-    randombytes_buf(header.nonce, crypto_stream_chacha20_NONCEBYTES);
 
     /* Copy the public keys */
     memcpy(header.ephemeral_public_key, epk, crypto_scalarmult_BYTES);
     memcpy(payload.static_public_key,
            static_keys->Public(),
            crypto_scalarmult_BYTES);
+
+    /* Set the nonce */
+    nonce.Copy(header.nonce);
 
     /* Set the timestampt */
     payload.timestamp = (unsigned long)std::time(nullptr);

@@ -2,6 +2,7 @@
 #include "core/global.h"
 #include "core/keys.h"
 #include "package/handshake_request.h"
+#include "package/handshake_response.h"
 #include "util/equal.h"
 #include "util/hkdf.h"
 #include "util/logger.h"
@@ -31,9 +32,12 @@ send_request:
         /* Generate the ephemeral key pair */
         const Keys ephemeral_keys;
 
+        /* Initialize the nonce */
+        Nonce nonce;
+
         /* Fill the request */
         HandshakeRequest* request =
-            new (buffer) HandshakeRequest(ephemeral_keys.Public());
+            new (buffer) HandshakeRequest(ephemeral_keys.Public(), nonce);
 
         /* Compute the first shared secret */
         unsigned char shared[crypto_scalarmult_BYTES];
@@ -61,24 +65,22 @@ send_request:
             chain_key
         );
 
-        /* Send the crypted message */
+        /* Send the encrypted message */
         main_socket.Send(buffer, sizeof(HandshakeRequest),
                          Server::address);
     }
 
     /* Try to the get a server response */
 receive_response:
-    {
-        sockaddr_in from;
-        int response_size = main_socket.Receive(buffer, &from);
+    sockaddr_in from;
+    int response_size = main_socket.Receive(buffer, &from);
 
-        /* If there is an error */
-        if (response_size == -1) goto send_request;
+    /* If there is an error */
+    if (response_size != sizeof(HandshakeResponse)) goto send_request;
 
-        /* If there is a package not from the server */
-        if (!equal(from, Server::address)) goto receive_response;
+    /* If there is a package not from the server */
+    if (!equal(from, Server::address)) goto receive_response;
 
-        /* If all is OK, handle the response */
-        INFO_LOG("The response has been received from the server");
-    }
+    /* If all is OK, handle the response */
+    INFO_LOG("The response has been received from the server");
 }

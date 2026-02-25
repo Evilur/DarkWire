@@ -362,7 +362,7 @@ static int run_server() {
         if (response_size == -1) continue;
 
         /* Handle the package */
-        Server::HandlePackage(buffer, from);
+        Server::HandlePackage(buffer, response_size, from);
     }
 
     return -1;
