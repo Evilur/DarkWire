@@ -22,7 +22,7 @@ public:
 
     const T& Tail() const;
 
-    void Push(T element) noexcept;
+    void Push(const T& element) noexcept;
 
     void Pop();
 

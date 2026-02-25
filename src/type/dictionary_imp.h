@@ -12,7 +12,7 @@ template <typename K, typename T, typename S>
 Dictionary<K, T, S>::~Dictionary() noexcept { delete[] _buckets; }
 
 template <typename K, typename T, typename S>
-void Dictionary<K, T, S>::Put(const K& key, T element) {
+void Dictionary<K, T, S>::Put(const K& key, const T& element) {
     /* Calculate the key hash */
     const S hash = ::hash(key) % _capacity;
 

@@ -80,6 +80,7 @@ Diagnostics:
       - modernize-use-trailing-return-type
       - readability-braces-around-statements
       - readability-identifier-length
+      - cppcoreguidelines-pro-bounds-constant-array-index
       - readability-magic-numbers
     MissingIncludes: Strict
 Completion:

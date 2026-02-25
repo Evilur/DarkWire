@@ -32,7 +32,7 @@ public:
      * @param element Element to put into the map
      * @throw std::runtime_error If there is already an element with such a key
      */
-    void Put(const K& key, T element);
+    void Put(const K& key, const T& element);
 
     /**
      * Get the element from the hash map by the key

@@ -38,7 +38,7 @@ const T& LinkedList<T>::Tail() const {
 }
 
 template <typename T>
-void LinkedList<T>::Push(T element) noexcept {
+void LinkedList<T>::Push(const T& element) noexcept {
     /* If the list was empty */
     if (_head == nullptr) {
         _head = new Node(element);
