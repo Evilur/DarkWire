@@ -186,13 +186,6 @@ void Server::HandleHandshakeRequest(
             /* If there is no free ips, reset the connection */
             if (response_ip == INADDR_ANY) return;
         }
-
-        /* If all is OK, bind this ip by the current peer */
-        Peers::Details details { .endpoint = client };
-        memcpy(details.static_public_key,
-               request->payload.static_public_key,
-               crypto_scalarmult_BYTES);
-        Peers::peers->Put(client_ip, details);
     }
 
     /* Generate the ephemeral keys pair */
@@ -216,6 +209,16 @@ void Server::HandleHandshakeRequest(
         return;
     }
     hkdf(chain_key, chain_key, shared);
+
+    /* If all is OK, save the current peer */
+    Peers::Details details { .endpoint = client };
+    memcpy(details.static_public_key,
+           request->payload.static_public_key,
+           crypto_scalarmult_BYTES);
+    memcpy(details.chain_key,
+           chain_key,
+           crypto_aead_chacha20poly1305_KEYBYTES);
+    Peers::peers->Put(response_ip, details);
 
     /* Assemble the response */
     Nonce nonce(request->header.nonce);

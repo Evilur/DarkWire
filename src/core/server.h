@@ -28,7 +28,8 @@ private:
         struct Details {
             sockaddr_in endpoint;
             unsigned char static_public_key[crypto_scalarmult_BYTES];
-        } __attribute__((aligned(64)));
+            unsigned char chain_key[crypto_aead_chacha20poly1305_KEYBYTES];
+        } __attribute__((aligned(128)));
 
         static inline unsigned int number = 0;
         static inline LinkedList<const unsigned char*>* public_keys = nullptr;
