@@ -1,7 +1,7 @@
 #pragma once
 
 #include "type/dictionary.h"
-#include "package/server_handshake_request.h"
+#include "package/handshake_request.h"
 #include "type/linked_list.h"
 #include "type/uniq_ptr_imp.h"
 #include "util/class.h"
@@ -28,17 +28,17 @@ private:
             unsigned long last_timestamp;
             unsigned int local_ip;
             sockaddr_in endpoint;
-        } __attribute__((aligned(16)));
+        } __attribute__((aligned(32)));
 
-        static inline LinkedList<const unsigned char*>* public_keys = nullptr;
         static inline unsigned int number = 0;
+        static inline LinkedList<const unsigned char*>* public_keys = nullptr;
         static inline Dictionary<KeyBuffer,
                                  Details,
                                  unsigned int>* peers = nullptr;
     };
 
-    static void HandleServerHandshakeRequest(
-        UniqPtr<ServerHandshakeRequest> request,
+    static void HandleHandshakeRequest(
+        UniqPtr<HandshakeRequest> request,
         sockaddr_in client
     ) noexcept;
 };

@@ -50,12 +50,12 @@ void Server::HandlePackage(const char* const buffer,
         Handle##T(request, client);                                           \
     }
 
-    if (type == SERVER_HANDSHAKE_REQUEST)
-        COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(ServerHandshakeRequest);
+    if (type == HANDSHAKE_REQUEST)
+        COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(HandshakeRequest);
 }
 
-void Server::HandleServerHandshakeRequest(
-    const UniqPtr<ServerHandshakeRequest> request,
+void Server::HandleHandshakeRequest(
+    const UniqPtr<HandshakeRequest> request,
     const sockaddr_in client
 ) noexcept {
     INFO_LOG("Recieve the handshake request from %s:%hu",

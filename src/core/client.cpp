@@ -1,8 +1,7 @@
 #include "client.h"
-#include "core/config.h"
 #include "core/global.h"
 #include "core/keys.h"
-#include "package/server_handshake_request.h"
+#include "package/handshake_request.h"
 #include "util/equal.h"
 #include "util/hkdf.h"
 #include "util/logger.h"
@@ -33,8 +32,8 @@ send_request:
         const Keys ephemeral_keys;
 
         /* Fill the request */
-        ServerHandshakeRequest* request =
-            new (buffer) ServerHandshakeRequest(ephemeral_keys.Public());
+        HandshakeRequest* request =
+            new (buffer) HandshakeRequest(ephemeral_keys.Public());
 
         /* Compute the first shared secret */
         unsigned char shared[crypto_scalarmult_BYTES];
@@ -63,7 +62,7 @@ send_request:
         );
 
         /* Send the crypted message */
-        main_socket.Send(buffer, sizeof(ServerHandshakeRequest),
+        main_socket.Send(buffer, sizeof(HandshakeRequest),
                          Server::address);
     }
 

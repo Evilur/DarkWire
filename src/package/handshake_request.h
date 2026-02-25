@@ -5,7 +5,7 @@
 #include <netinet/in.h>
 #include <sodium.h>
 
-struct ServerHandshakeRequest final {
+struct HandshakeRequest final {
     struct {
         PackageType type;
         unsigned char ephemeral_public_key[crypto_scalarmult_BYTES];
@@ -19,5 +19,5 @@ struct ServerHandshakeRequest final {
     } __attribute__((packed)) payload;
     unsigned char poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
-    explicit ServerHandshakeRequest(const unsigned char* epk);
+    explicit HandshakeRequest(const unsigned char* epk);
 } __attribute__((packed));

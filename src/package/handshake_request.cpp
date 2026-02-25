@@ -1,13 +1,13 @@
-#include "server_handshake_request.h"
+#include "handshake_request.h"
 #include "core/global.h"
 
 #include <arpa/inet.h>
 #include <cstring>
 #include <ctime>
 
-ServerHandshakeRequest::ServerHandshakeRequest(const unsigned char* const epk) {
+HandshakeRequest::HandshakeRequest(const unsigned char* const epk) {
     /* Set the type */
-    header.type = SERVER_HANDSHAKE_REQUEST;
+    header.type = HANDSHAKE_REQUEST;
 
     /* Set the nonce */
     randombytes_buf(header.nonce, crypto_stream_chacha20_NONCEBYTES);
