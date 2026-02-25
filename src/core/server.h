@@ -26,16 +26,18 @@ public:
 private:
     struct Peers {
         struct Details {
-            unsigned long last_timestamp;
-            unsigned int local_ip;
             sockaddr_in endpoint;
-        } __attribute__((aligned(32)));
+            unsigned char static_public_key[crypto_scalarmult_BYTES];
+        } __attribute__((aligned(64)));
 
         static inline unsigned int number = 0;
         static inline LinkedList<const unsigned char*>* public_keys = nullptr;
-        static inline Dictionary<KeyBuffer,
+        static inline Dictionary<unsigned int,
                                  Details,
                                  unsigned int>* peers = nullptr;
+        static inline Dictionary<KeyBuffer,
+                                 unsigned long,
+                                 unsigned int>* timestamps = nullptr;
     };
 
     static void HandleHandshakeRequest(

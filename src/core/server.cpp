@@ -25,17 +25,20 @@ void Server::SavePeer(const unsigned char* const public_key) {
 }
 
 void Server::Init() {
-    /* Allocate the memory for the dictionary */
-    Peers::peers = new Dictionary<KeyBuffer,
-                                    Peers::Details,
-                                    unsigned int>(Peers::number);
+    /* Allocate the memory for dictionaries */
+    Peers::peers = new Dictionary<unsigned int,
+                                  Peers::Details,
+                                  unsigned int>(Peers::number);
+    Peers::timestamps = new Dictionary<KeyBuffer,
+                                       unsigned long,
+                                       unsigned int>(Peers::number);
 
-    /* Fill timestamps dictioary with zeros */
+    /* Fill timestamps dictionary with zeros */
     for (const unsigned char* public_key : *Peers::public_keys)
-        Peers::peers->Put(public_key, {
-            .last_timestamp = 0,
-            .local_ip = INADDR_ANY
-        });
+        Peers::timestamps->Put(public_key, 0UL);
+
+    /* Add server to the peers list */
+    Peers::peers->Put(ip_address, {});
 }
 
 void Server::HandlePackage(const char* const buffer, const int buffer_size,
@@ -116,10 +119,6 @@ void Server::HandleHandshakeRequest(
         }
     }
 
-    /* Get the peer from the dictionary */
-    Peers::Details& peer_details =
-        Peers::peers->Get(request->payload.static_public_key);
-
     /* Check the timestamp */
     {
         /* Get the current time */
@@ -134,11 +133,15 @@ void Server::HandleHandshakeRequest(
         /* If the time delta is too big */
         if (delta_time > 120) return;
 
+        /* Get the last timestamp for such a key */
+        unsigned long& last_timestamp =
+            Peers::timestamps->Get(request->payload.static_public_key);
+
         /* Compare current timestamp with the last one */
-        if (client_timestamp <= peer_details.last_timestamp) return;
+        if (client_timestamp <= last_timestamp) return;
 
         /* If all is ok, update the last timestamp */
-        peer_details.last_timestamp = client_timestamp;
+        last_timestamp = client_timestamp;
     }
 
     /* Variables for the response (default is data from the request) */
@@ -151,15 +154,13 @@ void Server::HandleHandshakeRequest(
         const unsigned int client_ip = response_ip;
         const unsigned char client_netmask = response_netmask;
 
+        /* TODO: try delete the peer with such a static key */
+
         /* If there already an ip address passed */
         if (client_ip != INADDR_ANY && client_netmask != 0) {
-            /* Go through all the peers in the dict */
-            bool is_busy = false;
-            for (const auto& [public_key, details] : *Peers::peers)
-                if (details.local_ip == client_ip) is_busy = true;
-
-            /* If the ip is busy, reset the connection */
-            if (is_busy) return;
+            /* If there is already an element with such a local ip,
+             * reset the connection */
+            if (Peers::peers->Has(client_ip)) return;
         /* If the user decide to get ip by the server */
         } else {
             /* Set the server's netmask to the response */
@@ -171,20 +172,12 @@ void Server::HandleHandshakeRequest(
             const unsigned int network = htonl(ntohl(ip_address) & binmask);
             const unsigned int broadcast = network | htonl(~binmask);
 
-            /* Assemble the dictionary 'ip -> is busy?' */
-            Dictionary<unsigned int, bool, unsigned int>
-            busy_ips(Peers::number);
-            for (const auto& [public_key, details] : *Peers::peers)
-                if (details.local_ip != INADDR_ANY)
-                    busy_ips.Put(details.local_ip, true);
-            busy_ips.Put(ip_address, true);
-
             /* Try to find the free ip in the server's local network */
             const unsigned int start = ntohl(network);
             const unsigned int end = ntohl(broadcast);
             for (unsigned int ip = start + 1; ip < end; ++ip) {
                 const unsigned int htonl_ip = htonl(ip);
-                if (!busy_ips.Has(htonl_ip)) {
+                if (!Peers::peers->Has(htonl_ip)) {
                     response_ip = htonl_ip;
                     break;
                 }
@@ -193,11 +186,14 @@ void Server::HandleHandshakeRequest(
             /* If there is no free ips, reset the connection */
             if (response_ip == INADDR_ANY) return;
         }
-    }
 
-    /* If all is OK, update the peer */
-    peer_details.local_ip = response_ip;
-    peer_details.endpoint = client;
+        /* If all is OK, bind this ip by the current peer */
+        Peers::Details details { .endpoint = client };
+        memcpy(details.static_public_key,
+               request->payload.static_public_key,
+               crypto_scalarmult_BYTES);
+        Peers::peers->Put(client_ip, details);
+    }
 
     /* Generate the ephemeral keys pair */
     Keys ephemeral_keys;
