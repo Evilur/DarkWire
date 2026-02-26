@@ -40,12 +40,16 @@ TUN::TUN(const char* const name) : _tun_name(name),
 
 TUN::~TUN() noexcept { close(_tun_fd); }
 
-void TUN::Up() const noexcept {
+void TUN::Up() noexcept {
     System::Exec(String::Format("ip link set %s up",
                                 (const char*)_tun_name));
+    _is_up = true;
 }
 
-void TUN::Down() const noexcept {
+void TUN::Down() noexcept {
     System::Exec(String::Format("ip link set %s down",
                                 (const char*)_tun_name));
+    _is_up = false;
 }
+
+bool TUN::IsUp() const noexcept { return _is_up; }

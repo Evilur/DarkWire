@@ -15,11 +15,15 @@ public:
 
     ~TUN() noexcept;
 
-    void Up() const noexcept;
+    void Up() noexcept;
 
-    void Down() const noexcept;
+    void Down() noexcept;
+
+    [[nodiscard]] bool IsUp() const noexcept;
 
 private:
     const String _tun_name;
     const int _tun_fd;
+
+    bool _is_up = false;
 };

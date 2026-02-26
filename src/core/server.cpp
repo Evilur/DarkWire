@@ -48,16 +48,16 @@ void Server::HandlePackage(const char* const buffer, const int buffer_size,
     if (raw_type > TRANSFER_DATA) return;
     const PackageType type = (PackageType)raw_type;
 
-    /* Handle the package by its type */
 #define COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(T)                                  \
     {                                                                         \
         T* request = new T(*(const T*)(const void*)buffer);                   \
-        if (buffer_size != sizeof(T)) return;                                 \
         std::thread(&Handle##T, request, client).detach();                    \
     }
 
+    /* Handle the package by its type */
     if (type == HANDSHAKE_REQUEST)
-        COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(HandshakeRequest);
+        if (buffer_size == sizeof(HandshakeRequest))
+            COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(HandshakeRequest);
 }
 
 void Server::HandleHandshakeRequest(

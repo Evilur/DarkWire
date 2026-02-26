@@ -15,6 +15,7 @@
 #include <exception>
 #include <fstream>
 #include <sodium.h>
+#include <thread>
 
 #ifdef _WIN32
     #include <io.h>
@@ -314,18 +315,6 @@ static int handle_config(const char* const name) {
 }
 
 static int run_client() {
-    /* Block the thread by the socket for no more than 6 seconds */
-    constexpr int seconds_to_wait = 6;
-#ifdef _WIN64
-    constexpr DWORD time = seconds_to_wait * 1000;
-#else
-    constexpr timeval time {
-        .tv_sec = seconds_to_wait,
-        .tv_usec = 0
-    };
-#endif
-    main_socket.SetOption(SO_RCVTIMEO, &time, sizeof(time));
-
     /* Save the server */
     {
         char buffer[] = "255.255.255.255:65535";
@@ -334,12 +323,30 @@ static int run_client() {
                            (const char*)Config::Server::public_key);
     }
 
-    /* Perform the handshake with the server */
-    Client::PerformHandshakeWithServer();
+    /* Create the virtual net interface */
+    tun = new TUN(interface_name);
 
-    /* Up the interface */
-    up_interface();
-    return 0;
+    /* Save the handshake every 6 seconds until get the response,
+     * and every 3 minutes at all */
+    std::thread handshake_loop(Client::RunHandshakeLoop);
+
+    /* Start receiving requests and responses */
+    for(;;) {
+        /* Buffer for requests and responses */
+        char buffer[1500 + 1 + crypto_stream_chacha20_NONCEBYTES];
+
+        /* Recieve the package */
+        sockaddr_in from;
+        const int package_size = main_socket.Receive(buffer, &from);
+
+        /* If there is an error */
+        if (package_size == -1) continue;
+
+        /* Handle the package */
+        Client::HandlePackage(buffer, package_size, from);
+    }
+
+    return -1;
 }
 
 static int run_server() {
@@ -351,12 +358,12 @@ static int run_server() {
 
     /* Start receiving requests */
     for (;;) {
-        /* Buffer for requests and responses */
+        /* Buffer for requests */
         char buffer[1500 + 1 + crypto_stream_chacha20_NONCEBYTES];
 
         /* Recieve the request from a client */
         sockaddr_in from;
-        int response_size = main_socket.Receive(buffer, &from);
+        const int response_size = main_socket.Receive(buffer, &from);
 
         /* If there is an error */
         if (response_size == -1) continue;

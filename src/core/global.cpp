@@ -8,8 +8,8 @@ unsigned char netmask = 0;
 
 String interface_name(0UL);
 
+TUN* tun = nullptr;
+
 const Keys* static_keys = nullptr;
 
 const UDPSocket main_socket;
-
-const TUN* tun = nullptr;

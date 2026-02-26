@@ -17,8 +17,8 @@ extern unsigned char netmask;
 
 extern String interface_name;
 
+extern TUN* tun;
+
 extern const Keys* static_keys;
 
 extern const UDPSocket main_socket;
-
-extern const TUN* tun;
