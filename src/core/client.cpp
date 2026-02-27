@@ -32,7 +32,7 @@ void Client::Init() {
 }
 
 void Client::RunHandshakeLoop() {
-    /* Send the handhake request */
+    /* Send a handhake request */
     for (;;) {
         /* Check the timestamp */
         const unsigned long current_time = std::time(nullptr);
@@ -42,7 +42,7 @@ void Client::RunHandshakeLoop() {
             continue;
         }
 
-        INFO_LOG("Sending the handshake request to the server");
+        INFO_LOG("Sending a handshake request to the server");
 
         /* Generate the ephemeral keys pair */
         Server::ephemeral_keys = new Keys();

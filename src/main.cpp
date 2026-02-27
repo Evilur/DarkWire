@@ -60,7 +60,7 @@ int main(const int argc, const char* const* const argv) {
     return run_server();
 }
 
-static void on_terminate() {
+static inline void on_terminate() {
     /* Get the current exception */
     std::exception_ptr exception = std::current_exception();
 
@@ -77,7 +77,7 @@ static void on_terminate() {
     } catch (...) { FATAL_LOG("Unhandled unknown exception"); }
 }
 
-static int print_help() {
+static inline int print_help() {
     constexpr const char* const help_message =
         "NAME:\n"
         "\tdw - DarkWire\n\n"
@@ -99,7 +99,7 @@ static int print_help() {
     return 0;
 }
 
-static int genkey() {
+static inline int genkey() {
     /* Create the keys pair */
     const Keys keys;
 
@@ -131,7 +131,7 @@ static int genkey() {
     return 0;
 }
 
-static int pubkey() {
+static inline int pubkey() {
     /* Create a buffer for the base64 key representations */
     const unsigned long base64_size = sodium_base64_encoded_len(
         crypto_scalarmult_BYTES,
@@ -162,7 +162,7 @@ static int pubkey() {
     return 0;
 }
 
-static int handle_config(const char* const name) {
+static inline int handle_config(const char* const name) {
     /* Set the suffix */
     constexpr const char suffix[] = ".conf";
 
@@ -322,7 +322,7 @@ static int handle_config(const char* const name) {
     return 0;
 }
 
-static int run_client() {
+static inline int run_client() {
     /* Init the client */
     Client::Init();
 
@@ -330,37 +330,37 @@ static int run_client() {
      * and every 3 minutes at all */
     std::thread(Client::RunHandshakeLoop).detach();
 
-    /* Start receiving requests and responses */
-    for(;;) {
-        /* Buffer for requests and responses */
-        char buffer[1500 + 1 + crypto_stream_chacha20_NONCEBYTES];
+    /* Allocate the memory for the buffer */
+    char* buffer = new char[(unsigned int)(int)Config::Interface::mtu];
 
-        /* Recieve the package */
+    /* Start receiving packages */
+    for (;;) {
+        /* Recieve the request from a client */
         sockaddr_in from;
-        const int package_size = main_socket.Receive(buffer, &from);
+        const int buffer_size = main_socket.Receive(buffer, &from);
 
         /* If there is an error */
-        if (package_size == -1) continue;
+        if (buffer_size == -1) continue;
 
         /* Handle the package */
-        Client::HandlePackage(buffer, package_size, from);
+        Client::HandlePackage(buffer, buffer_size, from);
     }
 
     return -1;
 }
 
-static int run_server() {
+static inline int run_server() {
     /* Up the interface */
     up_interface();
 
     /* Init the server */
     Server::Init();
 
+    /* Allocate the memory for the buffer */
+    char* buffer = new char[(unsigned int)(int)Config::Interface::mtu];
+
     /* Start receiving packages */
     for (;;) {
-        /* Buffer for requests */
-        char buffer[1500 + 1 + crypto_stream_chacha20_NONCEBYTES];
-
         /* Recieve the request from a client */
         sockaddr_in from;
         const int buffer_size = main_socket.Receive(buffer, &from);

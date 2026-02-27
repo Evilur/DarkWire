@@ -49,7 +49,7 @@ public:
         static inline Parameter private_key = "";
         static inline Parameter address = "";
         static inline Parameter listen = 0;
-        static inline Parameter mtu = 1420;
+        static inline Parameter mtu = 1480;
         static inline Parameter pre_up = "";
         static inline Parameter post_up = "";
         static inline Parameter pre_down = "";
