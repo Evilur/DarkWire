@@ -1,10 +1,10 @@
 #pragma once
 
 template <typename T>
-static inline void delete_object(T* obj) noexcept;
+inline void delete_object(T* obj) noexcept;
 
 template <typename T>
-static inline void delete_array(T* arr) noexcept;
+inline void delete_array(T* arr) noexcept;
 
 template <typename T>
 using deleter = void(*)(T*);

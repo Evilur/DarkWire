@@ -19,11 +19,11 @@ public:
 
     void Down() noexcept;
 
-    [[nodiscard]] bool IsUp() const noexcept;
+    void RunReadLoop() const;
+
+    void Write() noexcept;
 
 private:
     const String _tun_name;
     const int _tun_fd;
-
-    bool _is_up = false;
 };

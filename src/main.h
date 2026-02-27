@@ -13,5 +13,3 @@ static void on_terminate();
 [[nodiscard]] static int run_client();
 
 [[nodiscard]] static int run_server();
-
-static void up_interface();

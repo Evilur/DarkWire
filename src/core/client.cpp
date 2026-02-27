@@ -1,6 +1,7 @@
 #include "client.h"
 #include "core/global.h"
 #include "core/keys.h"
+#include "main.h"
 #include "package/handshake_request.h"
 #include "package/handshake_response.h"
 #include "util/equal.h"
@@ -149,7 +150,7 @@ void Client::HandleHandshakeResponse(const UniqPtr<HandshakeResponse> response,
     netmask = response->payload.netmask;
 
     /* Up the interface */
-    if (!tun->IsUp()) tun->Up();
+    if (tun == nullptr) up_interface();
 
     /* If all is OK, next handshake will be after 3 minutes */
     INFO_LOG("The handshake response has been successfully handled");

@@ -40,6 +40,8 @@ public:
 
     ~String() noexcept;
 
+    [[nodiscard]] const char* CStr() const noexcept;
+
 private:
     char* _str;
     unsigned long _size;

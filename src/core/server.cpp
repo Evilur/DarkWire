@@ -166,14 +166,8 @@ void Server::HandleHandshakeRequest(
             /* Set the server's netmask to the response */
             response_netmask = netmask;
 
-            /* Get the network and the broadcast addresses */
-            const unsigned int binmask = (netmask == 0) ? 0x0U : (netmask == 32)
-                                       ? 0xFFFFFFFFU : (~0U << (32U - netmask));
-            const unsigned int network = htonl(ntohl(ip_address) & binmask);
-            const unsigned int broadcast = network | htonl(~binmask);
-
             /* Try to find the free ip in the server's local network */
-            const unsigned int start = ntohl(network);
+            const unsigned int start = ntohl(network_prefix);
             const unsigned int end = ntohl(broadcast);
             for (unsigned int ip = start + 1; ip < end; ++ip) {
                 const unsigned int htonl_ip = htonl(ip);

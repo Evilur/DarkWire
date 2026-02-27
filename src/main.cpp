@@ -305,8 +305,16 @@ static int handle_config(const char* const name) {
     char* address_buffer_sep = strchr(address_buffer, '/');
     if (address_buffer_sep != nullptr) {
         *address_buffer_sep = '\0';
+
+        /* Set the ip address and the netmask */
         ip_address = inet_addr(address_buffer);
         netmask = (unsigned char)atoi(address_buffer_sep + 1);
+
+        /* Set the network prefix and the broadcast address */
+        const unsigned int binmask = (netmask == 0) ? 0x0U : (netmask == 32)
+            ? 0xFFFFFFFFU : (~0U << (32U - netmask));
+        network_prefix = htonl(ntohl(ip_address) & binmask);
+        broadcast = network_prefix | htonl(~binmask);
     }
 
     /* Set the tune name and return the success code */
@@ -323,12 +331,9 @@ static int run_client() {
                            (const char*)Config::Server::public_key);
     }
 
-    /* Create the virtual net interface */
-    tun = new TUN(interface_name);
-
     /* Save the handshake every 6 seconds until get the response,
      * and every 3 minutes at all */
-    std::thread handshake_loop(Client::RunHandshakeLoop);
+    std::thread(Client::RunHandshakeLoop).detach();
 
     /* Start receiving requests and responses */
     for(;;) {
@@ -373,19 +378,4 @@ static int run_server() {
     }
 
     return -1;
-}
-
-static void up_interface() {
-    /* Exec the PreUp command */
-    const char* const pre_up = (const char*)Config::Interface::pre_up;
-    if (*pre_up != '\0') System::Exec(pre_up);
-
-    /* Create the interface */
-    tun = new TUN(interface_name);
-    tun->Up();
-    INFO_LOG("Interface [%s] has been created", (const char*)interface_name);
-
-    /* Exec the PostUp command */
-    const char* const post_up = (const char*)Config::Interface::post_up;
-    if (*post_up != '\0') System::Exec(post_up);
 }

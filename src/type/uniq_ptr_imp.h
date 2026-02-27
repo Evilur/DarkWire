@@ -3,10 +3,10 @@
 #include "uniq_ptr.h"
 
 template<typename T>
-static inline void delete_object(T* const obj) noexcept { delete obj; }
+inline void delete_object(T* const obj) noexcept { delete obj; }
 
 template<typename T>
-static inline void delete_array(T* const arr) noexcept { delete[] arr; }
+inline void delete_array(T* const arr) noexcept { delete[] arr; }
 
 template<typename T, deleter<T> D>
 UniqPtrBase<T, D>::UniqPtrBase(T* const ptr) noexcept : _ptr(ptr) { }

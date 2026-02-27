@@ -90,3 +90,5 @@ String::operator char*() const noexcept { return _str; }
 String::operator std::string_view() const noexcept { return { _str, _size }; }
 
 String::~String() noexcept { delete[] _str; }
+
+const char* String::CStr() const noexcept { return _str; }
