@@ -239,4 +239,7 @@ void Server::HandleHandshakeRequest(
     main_socket.Send((const char*)(const void*)&response,
                      sizeof(HandshakeResponse),
                      client);
+
+    /* TODO */
+    /* Send the peers list */
 }

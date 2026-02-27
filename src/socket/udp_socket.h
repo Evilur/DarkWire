@@ -52,5 +52,5 @@ public:
         .sin_addr = INADDR_ANY
     };
 
-    static sockaddr_in GetAddress(char* str);
+    static sockaddr_in GetAddress(const char* str);
 };

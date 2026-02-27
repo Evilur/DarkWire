@@ -182,12 +182,13 @@ void UDPSocket::Close() noexcept {
     _socket_fd = -1;
 }
 
-sockaddr_in UDPSocket::GetAddress(char* const str) {
+sockaddr_in UDPSocket::GetAddress(const char* const str) {
     /* Store the result */
-    sockaddr_in result { AF_INET };
+    sockaddr_in result;
 
     /* Get the ip */
-    char* const ip_ptr = str;
+    char ip_ptr[] = "255.255.255.255:65535";
+    strncpy(ip_ptr, str, sizeof(ip_ptr));
     char* const ip_end = strchr(ip_ptr, ':');
     if (ip_end == nullptr) {
         ERROR_LOG("Invalid address");

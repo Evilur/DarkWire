@@ -15,8 +15,6 @@ struct HandshakeRequest final {
     struct {
         unsigned char static_public_key[crypto_scalarmult_BYTES];
         unsigned long timestamp;
-        unsigned int ip;
-        unsigned char netmask;
     } __attribute__((packed)) payload;
     unsigned char poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 

@@ -17,8 +17,7 @@ class Client final {
 public:
     PREVENT_INSTANTIATION(Client);
 
-    static void SaveServer(const sockaddr_in& address,
-                           const char* public_key_base64);
+    static void Init();
 
     static void RunHandshakeLoop();
 

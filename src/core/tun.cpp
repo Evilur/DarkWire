@@ -67,12 +67,10 @@ void TUN::RunReadLoop() const {
         const unsigned int destinastion_ip = ntohl(ip_header->daddr);
 
         /* Drop multicasts */
-        /* TODO: handle them (maybe) */
         if (destinastion_ip >= 0xE0000000 && destinastion_ip <= 0xEFFFFFFF)
             continue;
 
-        DEBUG_LOG("Source IP: %s", inet_ntoa({ip_header->saddr}));
-        DEBUG_LOG("Dest IP: %s", inet_ntoa({ip_header->daddr}));
+        /* Handle the buffer */
     }
 }
 

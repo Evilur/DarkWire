@@ -1,7 +1,7 @@
 #include "client.h"
+#include "core/config.h"
 #include "core/global.h"
 #include "core/keys.h"
-#include "main.h"
 #include "package/handshake_request.h"
 #include "package/handshake_response.h"
 #include "util/equal.h"
@@ -13,12 +13,18 @@
 #include <thread>
 #include <unistd.h>
 
-void Client::SaveServer(const sockaddr_in& address,
-                       const char* const public_key_base64) {
-    Server::endpoint = sockaddr_in(address);
+void Client::Init() {
+    /* Get the address */
+    Server::endpoint =
+        UDPSocket::GetAddress((const char*)Config::Server::endpoint);
+
+    /* Allocate memory for keys */
     Server::public_key = new unsigned char[crypto_scalarmult_BYTES];
     Server::chain_key =
         new unsigned char[crypto_aead_chacha20poly1305_KEYBYTES];
+
+    /* Get the server's public key */
+    const char* public_key_base64 = (const char*)Config::Server::public_key;
     sodium_base642bin(Server::public_key, crypto_scalarmult_BYTES,
                       public_key_base64, strlen(public_key_base64),
                       nullptr, nullptr, nullptr,

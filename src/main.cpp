@@ -323,13 +323,8 @@ static int handle_config(const char* const name) {
 }
 
 static int run_client() {
-    /* Save the server */
-    {
-        char buffer[] = "255.255.255.255:65535";
-        strcpy(buffer, (const char*)Config::Server::endpoint);
-        Client::SaveServer(UDPSocket::GetAddress(buffer),
-                           (const char*)Config::Server::public_key);
-    }
+    /* Init the client */
+    Client::Init();
 
     /* Save the handshake every 6 seconds until get the response,
      * and every 3 minutes at all */
@@ -361,20 +356,20 @@ static int run_server() {
     /* Init the server */
     Server::Init();
 
-    /* Start receiving requests */
+    /* Start receiving packages */
     for (;;) {
         /* Buffer for requests */
         char buffer[1500 + 1 + crypto_stream_chacha20_NONCEBYTES];
 
         /* Recieve the request from a client */
         sockaddr_in from;
-        const int response_size = main_socket.Receive(buffer, &from);
+        const int buffer_size = main_socket.Receive(buffer, &from);
 
         /* If there is an error */
-        if (response_size == -1) continue;
+        if (buffer_size == -1) continue;
 
         /* Handle the package */
-        Server::HandlePackage(buffer, response_size, from);
+        Server::HandlePackage(buffer, buffer_size, from);
     }
 
     return -1;
