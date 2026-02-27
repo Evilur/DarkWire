@@ -1,6 +1,7 @@
 #pragma once
 
 #include "type/string.h"
+
 #include <cstdio>
 
 template <typename T>

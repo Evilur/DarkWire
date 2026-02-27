@@ -16,7 +16,7 @@
 void Client::Init() {
     /* Get the address */
     Server::endpoint =
-        UDPSocket::GetAddress((const char*)Config::Server::endpoint);
+        UDPSocket::GetAddress(Config::Server::endpoint);
 
     /* Allocate memory for keys */
     Server::public_key = new unsigned char[crypto_scalarmult_BYTES];
@@ -24,7 +24,7 @@ void Client::Init() {
         new unsigned char[crypto_aead_chacha20poly1305_KEYBYTES];
 
     /* Get the server's public key */
-    const char* public_key_base64 = (const char*)Config::Server::public_key;
+    const char* public_key_base64 = Config::Server::public_key;
     sodium_base642bin(Server::public_key, crypto_scalarmult_BYTES,
                       public_key_base64, strlen(public_key_base64),
                       nullptr, nullptr, nullptr,

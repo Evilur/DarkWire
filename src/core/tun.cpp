@@ -56,7 +56,7 @@ void TUN::Down() noexcept {
 }
 
 void TUN::RunReadLoop() const {
-    const unsigned int MTU = (unsigned int)(int)Config::Interface::mtu;
+    const unsigned int MTU = (unsigned int)Config::Interface::mtu;
     char* const buffer = new char[MTU];
     for (;;) {
         /* Get the ip package */

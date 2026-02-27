@@ -263,10 +263,6 @@ static inline int handle_config(const char* const name) {
                 Config::Interface::private_key = parameter_value;
             else if (strcmp(parameter_key, "Address") == 0)
                 Config::Interface::address = parameter_value;
-            else if (strcmp(parameter_key, "Listen") == 0)
-                Config::Interface::listen = parameter_value;
-            else if (strcmp(parameter_key, "MTU") == 0)
-                Config::Interface::mtu = parameter_value;
             else if (strcmp(parameter_key, "PreUp") == 0)
                 Config::Interface::pre_up = parameter_value;
             else if (strcmp(parameter_key, "PostUp") == 0)
@@ -275,6 +271,11 @@ static inline int handle_config(const char* const name) {
                 Config::Interface::pre_down = parameter_value;
             else if (strcmp(parameter_key, "PostDown") == 0)
                 Config::Interface::post_down = parameter_value;
+            else if (strcmp(parameter_key, "Listen") == 0)
+                Config::Interface::listen =
+                    String::ToInt<short>(parameter_value);
+            else if (strcmp(parameter_key, "MTU") == 0)
+                Config::Interface::mtu = String::ToInt<int>(parameter_value);
         } else if (strcmp(current_section, "Server") == 0) {
             if (strcmp(parameter_key, "PublicKey") == 0)
                 Config::Server::public_key = parameter_value;
@@ -284,24 +285,30 @@ static inline int handle_config(const char* const name) {
     }
 
     /* Check the private key */
-    if (*(const char*)Config::Interface::private_key == '\0') {
+    if (*Config::Interface::private_key.CStr() == '\0') {
         FATAL_LOG("There is no private key in the config");
         return -1;
     }
 
+    /* Check the MTU */
+    if (Config::Interface::mtu > 1480) {
+        FATAL_LOG("MTU can not be more than 1480");
+        return -1;
+    }
+
     /* Save the static keys pair */
-    static_keys = new Keys((const char*)Config::Interface::private_key);
+    static_keys = new Keys(Config::Interface::private_key);
 
     /* Init the main socket for all future connections */
     main_socket.Bind({
         .sin_family = AF_INET,
-        .sin_port = htons((unsigned short)(int)Config::Interface::listen),
+        .sin_port = htons((unsigned short)Config::Interface::listen),
         .sin_addr = INADDR_ANY
     });
 
     /* Set the local ip and netmask */
     char address_buffer[] = "255.255.255.255/32";
-    strcpy(address_buffer, (const char*)Config::Interface::address);
+    strcpy(address_buffer, Config::Interface::address);
     char* address_buffer_sep = strchr(address_buffer, '/');
     if (address_buffer_sep != nullptr) {
         *address_buffer_sep = '\0';
@@ -331,7 +338,7 @@ static inline int run_client() {
     std::thread(Client::RunHandshakeLoop).detach();
 
     /* Allocate the memory for the buffer */
-    char* buffer = new char[(unsigned int)(int)Config::Interface::mtu];
+    char* buffer = new char[(unsigned int)Config::Interface::mtu];
 
     /* Start receiving packages */
     for (;;) {
@@ -339,11 +346,9 @@ static inline int run_client() {
         sockaddr_in from;
         const int buffer_size = main_socket.Receive(buffer, &from);
 
-        /* If there is an error */
-        if (buffer_size == -1) continue;
-
         /* Handle the package */
-        Client::HandlePackage(buffer, buffer_size, from);
+        if (buffer_size != -1)
+            Client::HandlePackage(buffer, buffer_size, from);
     }
 
     return -1;
@@ -357,7 +362,7 @@ static inline int run_server() {
     Server::Init();
 
     /* Allocate the memory for the buffer */
-    char* buffer = new char[(unsigned int)(int)Config::Interface::mtu];
+    char* buffer = new char[(unsigned int)Config::Interface::mtu];
 
     /* Start receiving packages */
     for (;;) {
@@ -365,11 +370,9 @@ static inline int run_server() {
         sockaddr_in from;
         const int buffer_size = main_socket.Receive(buffer, &from);
 
-        /* If there is an error */
-        if (buffer_size == -1) continue;
-
         /* Handle the package */
-        Server::HandlePackage(buffer, buffer_size, from);
+        if (buffer_size != -1)
+            Server::HandlePackage(buffer, buffer_size, from);
     }
 
     return -1;

@@ -25,7 +25,7 @@ const UDPSocket main_socket;
 
 void up_interface() {
     /* Exec the PreUp command */
-    const char* const pre_up = (const char*)Config::Interface::pre_up;
+    const char* const pre_up = Config::Interface::pre_up;
     if (*pre_up != '\0') System::Exec(pre_up);
 
     /* Create the interface */
@@ -36,6 +36,6 @@ void up_interface() {
     std::thread(&TUN::RunReadLoop, tun).detach();
 
     /* Exec the PostUp command */
-    const char* const post_up = (const char*)Config::Interface::post_up;
+    const char* const post_up = Config::Interface::post_up;
     if (*post_up != '\0') System::Exec(post_up);
 }
