@@ -6,6 +6,7 @@
 #include "type/uniq_ptr_imp.h"
 #include "util/class.h"
 
+#include <mutex>
 #include <netinet/in.h>
 
 /**
@@ -33,16 +34,21 @@ private:
 
         static inline unsigned int number = 0;
         static inline LinkedList<const unsigned char*>* public_keys = nullptr;
+        static inline std::mutex public_keys_mutex;
         static inline Dictionary<unsigned int,
                                  Details,
                                  unsigned int>* peers = nullptr;
+        static inline std::mutex peers_mutex;
         static inline Dictionary<KeyBuffer,
                                  unsigned long,
                                  unsigned int>* timestamps = nullptr;
+        static inline std::mutex timestamps_mutex;
     };
 
     static void HandleHandshakeRequest(
         UniqPtr<HandshakeRequest> request,
         sockaddr_in client
     ) noexcept;
+
+    static inline std::mutex _rand_mutex;
 };

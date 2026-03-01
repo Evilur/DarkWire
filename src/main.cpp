@@ -8,7 +8,6 @@
 #include "type/string.h"
 #include "util/logger.h"
 #include "util/path.h"
-#include "util/system.h"
 
 #include <cstdio>
 #include <cstring>
@@ -38,6 +37,13 @@ int main(const int argc, const char* const* const argv) {
     if (sodium_init() == -1) {
         FATAL_LOG("Failed to initiate the libsodium");
         return -1;
+    }
+
+    /* Add some entrophy for the rand() */
+    {
+        unsigned int random_buf;
+        randombytes_buf(&random_buf, sizeof(random_buf));
+        std::srand(random_buf);
     }
 
     /* Init static classes */
@@ -314,14 +320,17 @@ static inline int handle_config(const char* const name) {
         *address_buffer_sep = '\0';
 
         /* Set the ip address and the netmask */
-        ip_address = inet_addr(address_buffer);
+        ip_address.nb = inet_addr(address_buffer);
+        ip_address.hb = ntohl(ip_address.nb);
         netmask = (unsigned char)atoi(address_buffer_sep + 1);
 
-        /* Set the network prefix and the broadcast address */
-        const unsigned int binmask = (netmask == 0) ? 0x0U : (netmask == 32)
-            ? 0xFFFFFFFFU : (~0U << (32U - netmask));
-        network_prefix = htonl(ntohl(ip_address) & binmask);
-        broadcast = network_prefix | htonl(~binmask);
+        if (netmask > 30) {
+            FATAL_LOG("Netmask can't be more than 30");
+            return -1;
+        }
+
+        /* Calculate net specific variables */
+        calc_net();
     }
 
     /* Set the tune name and return the success code */

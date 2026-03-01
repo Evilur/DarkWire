@@ -43,7 +43,8 @@ TUN::~TUN() noexcept { close(_tun_fd); }
 
 void TUN::Up() noexcept {
     System::Exec(String::Format("ip addr add %s/%hhu dev %s",
-                                inet_ntoa({ ip_address }), netmask,
+                                inet_ntoa({ ip_address.nb }),
+                                netmask,
                                 _tun_name.CStr()));
     System::Exec(String::Format("ip link set %s up", _tun_name.CStr()));
     INFO_LOG("Interface [%s] is up", interface_name.CStr());

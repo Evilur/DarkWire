@@ -11,11 +11,25 @@ enum Mode : char { CLIENT, SERVER };
 
 extern Mode mode;
 
-extern unsigned int ip_address;
+extern struct IpAddress {
+    unsigned int hb;
+    unsigned int nb;
+} __attribute__((aligned(8))) ip_address;
 
-extern unsigned int network_prefix;
+extern struct Binmask {
+    unsigned int hb;
+    unsigned int nb;
+} __attribute__((aligned(8))) binmask;
 
-extern unsigned int broadcast;
+extern struct NetworkPrefix {
+    unsigned int hb;
+    unsigned int nb;
+} __attribute__((aligned(8))) network_prefix;
+
+extern struct Broadcast {
+    unsigned int hb;
+    unsigned int nb;
+} __attribute__((aligned(8))) broadcast;
 
 extern unsigned char netmask;
 
@@ -28,3 +42,5 @@ extern const Keys* static_keys;
 extern const UDPSocket main_socket;
 
 extern void up_interface();
+
+extern void calc_net();

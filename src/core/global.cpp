@@ -7,11 +7,13 @@
 
 Mode mode = CLIENT;
 
-unsigned int ip_address = INADDR_ANY;
+IpAddress ip_address = { .hb = INADDR_ANY, .nb = INADDR_ANY };
 
-unsigned int network_prefix = INADDR_ANY;
+Binmask binmask = { .hb = INADDR_ANY, .nb = INADDR_ANY };
 
-unsigned int broadcast = INADDR_ANY;
+NetworkPrefix network_prefix = { .hb = INADDR_ANY, .nb = INADDR_ANY };
+
+Broadcast broadcast = { .hb = INADDR_ANY, .nb = INADDR_ANY };
 
 unsigned char netmask = 0;
 
@@ -38,4 +40,13 @@ void up_interface() {
     /* Exec the PostUp command */
     const char* const post_up = Config::Interface::post_up;
     if (*post_up != '\0') System::Exec(post_up);
+}
+
+void calc_net() {
+    binmask.hb = (netmask == 0) ? 0x0U : (~0U << (32U - netmask));
+    network_prefix.hb = ip_address.hb & binmask.hb;
+    broadcast.hb = network_prefix.hb | ~binmask.hb;
+    binmask.nb = htonl(binmask.hb);
+    network_prefix.nb = htonl(network_prefix.hb);
+    broadcast.nb = htonl(broadcast.hb);
 }

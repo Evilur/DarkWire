@@ -11,6 +11,7 @@
 
 void Server::SavePeer(const unsigned char* const public_key) {
     /* If the peers list isn't defined yet */
+    std::lock_guard public_keys_lock(Peers::public_keys_mutex);
     if (Peers::public_keys == nullptr) {
         /* Allocate the memory for the peers list */
         Peers::public_keys = new LinkedList<const unsigned char*>();
@@ -26,19 +27,22 @@ void Server::SavePeer(const unsigned char* const public_key) {
 
 void Server::Init() {
     /* Allocate the memory for dictionaries */
+    std::lock_guard peers_lock(Peers::peers_mutex);
     Peers::peers = new Dictionary<unsigned int,
                                   Peers::Details,
                                   unsigned int>(Peers::number);
+    std::lock_guard timestamps_lock(Peers::timestamps_mutex);
     Peers::timestamps = new Dictionary<KeyBuffer,
                                        unsigned long,
                                        unsigned int>(Peers::number);
 
     /* Fill timestamps dictionary with zeros */
+    std::lock_guard public_keys_lock(Peers::public_keys_mutex);
     for (const unsigned char* public_key : *Peers::public_keys)
         Peers::timestamps->Put(public_key, 0UL);
 
     /* Add server to the peers list */
-    Peers::peers->Put(ip_address, {});
+    Peers::peers->Put(ip_address.nb, {});
 }
 
 void Server::HandlePackage(const char* const buffer, const int buffer_size,
@@ -64,7 +68,7 @@ void Server::HandleHandshakeRequest(
     const UniqPtr<HandshakeRequest> request,
     const sockaddr_in client
 ) noexcept {
-    INFO_LOG("Recieve the handshake request from %s:%hu",
+    INFO_LOG("Receive a handshake request from %s:%hu",
              inet_ntoa(client.sin_addr),
              ntohs(client.sin_port));
 
@@ -108,6 +112,7 @@ void Server::HandleHandshakeRequest(
     {
         /* Try to find such a static key in the allowed peers linked list */
         bool is_allowed = false;
+        std::lock_guard public_keys_lock(Peers::public_keys_mutex);
         for (const unsigned char* public_key : *Peers::public_keys)
             if (memcmp(request->payload.static_public_key,
                        public_key,
@@ -134,8 +139,10 @@ void Server::HandleHandshakeRequest(
         if (delta_time > 120) return;
 
         /* Get the last timestamp for such a key */
+        Peers::timestamps_mutex.lock();
         unsigned long& last_timestamp =
             Peers::timestamps->Get(request->payload.static_public_key);
+        Peers::timestamps_mutex.unlock();
 
         /* Compare current timestamp with the last one */
         if (client_timestamp <= last_timestamp) return;
@@ -149,12 +156,17 @@ void Server::HandleHandshakeRequest(
     unsigned char response_netmask = request->payload.netmask;
 
     /* Handle the local ip address and netmask */
+    std::lock_guard peers_lock(Peers::peers_mutex);
     {
         /* Get the passed ip and the netmask */
         const unsigned int client_ip = response_ip;
         const unsigned char client_netmask = response_netmask;
 
-        /* TODO: try delete the peer with such a static key */
+        /* Try to delete the peer with such a static key (if exists) */
+        for (const auto& [local_ip, details] : *Peers::peers)
+            if (equal((KeyBuffer)details.static_public_key,
+                      (KeyBuffer)request->payload.static_public_key))
+                Peers::peers->Delete(local_ip);
 
         /* If there already an ip address passed */
         if (client_ip != INADDR_ANY && client_netmask != 0) {
@@ -166,18 +178,37 @@ void Server::HandleHandshakeRequest(
             /* Set the server's netmask to the response */
             response_netmask = netmask;
 
-            /* Try to find the free ip in the server's local network */
-            const unsigned int start = ntohl(network_prefix);
-            const unsigned int end = ntohl(broadcast);
-            for (unsigned int ip = start + 1; ip < end; ++ip) {
-                const unsigned int htonl_ip = htonl(ip);
-                if (!Peers::peers->Has(htonl_ip)) {
-                    response_ip = htonl_ip;
-                    break;
+            /* Try to get the random ip in the local network */
+            const unsigned int start = network_prefix.hb;
+            const unsigned int end = broadcast.hb;
+            _rand_mutex.lock();
+            const unsigned int random_ip =
+                (unsigned int)(start + (rand() % (end - start + 1)));
+            _rand_mutex.unlock();
+            const unsigned int random_ip_nb = htonl(random_ip);
+            if (!Peers::peers->Has(random_ip_nb)) {
+                response_ip = random_ip_nb;
+                goto the_end;
+            }
+
+            /* Try to get the free ip */
+            for (unsigned int ip = random_ip; ip < end; ++ip) {
+                const unsigned int ip_nb = htonl(ip);
+                if (!Peers::peers->Has(ip_nb)) {
+                    response_ip = ip_nb;
+                    goto the_end;
+                }
+            }
+            for (unsigned int ip = random_ip; ip > start; --ip) {
+                const unsigned int ip_nb = htonl(ip);
+                if (!Peers::peers->Has(ip_nb)) {
+                    response_ip = ip_nb;
+                    goto the_end;
                 }
             }
 
             /* If there is no free ips, reset the connection */
+        the_end:
             if (response_ip == INADDR_ANY) return;
         }
     }
@@ -239,7 +270,4 @@ void Server::HandleHandshakeRequest(
     main_socket.Send((const char*)(const void*)&response,
                      sizeof(HandshakeResponse),
                      client);
-
-    /* TODO */
-    /* Send the peers list */
 }
