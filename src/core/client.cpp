@@ -151,18 +151,21 @@ void Client::HandleHandshakeResponse(const UniqPtr<HandshakeResponse> response,
         return;
     };
 
-    /* Set the ip and the netmask */
-    ip_address.nb = response->payload.ip;
-    ip_address.hb = ntohl(ip_address.nb);
-    netmask = response->payload.netmask;
-
-    /* Calculate net-specific variables */
-    calc_net();
-
     /* If there is the first handshake */
-    if (tun == nullptr) up_interface();
+    if (tun == nullptr) {
+        /* Set the ip and the netmask */
+        ip_address.nb = response->payload.ip;
+        ip_address.hb = ntohl(ip_address.nb);
+        netmask = response->payload.netmask;
+
+        /* Calculate net-specific variables */
+        calc_net();
+
+        /* Up the interface */
+        up_interface();
+    }
 
     /* If all is OK, next handshake will be after 3 minutes */
     INFO_LOG("The handshake response has been successfully handled");
-    _next_handshake_timestamp += 180;
+    _next_handshake_timestamp += 10;
 }
