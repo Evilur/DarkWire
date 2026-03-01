@@ -7,6 +7,5 @@
  * @author Evilur <the.evilur@gmail.com>
  */
 class TunError final : public RuntimeError {
-public:
-    explicit TunError(const char* message);
+    using RuntimeError::RuntimeError;
 };

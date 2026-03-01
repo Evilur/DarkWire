@@ -10,12 +10,11 @@
  */
 class RuntimeError : public std::exception {
 public:
-    ~RuntimeError() noexcept override;
-
-protected:
     ALLOW_COPY_ALLOW_MOVE(RuntimeError);
 
     explicit RuntimeError(const char* message);
+
+    ~RuntimeError() noexcept override;
 
     [[nodiscard]] const char* what() const noexcept override;
 
