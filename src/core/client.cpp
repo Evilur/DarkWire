@@ -167,5 +167,5 @@ void Client::HandleHandshakeResponse(const UniqPtr<HandshakeResponse> response,
 
     /* If all is OK, next handshake will be after 3 minutes */
     INFO_LOG("The handshake response has been successfully handled");
-    _next_handshake_timestamp += 10;
+    _next_handshake_timestamp += 180;
 }
