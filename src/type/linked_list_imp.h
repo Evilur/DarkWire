@@ -1,8 +1,7 @@
 #pragma once
 
 #include "linked_list.h"
-
-#include <stdexcept>
+#include "exception/linked_list_error.h"
 
 template <typename T>
 LinkedList<T>::~LinkedList() noexcept {
@@ -12,28 +11,28 @@ LinkedList<T>::~LinkedList() noexcept {
 template <typename T>
 T& LinkedList<T>::Head() {
     if (_head == nullptr)
-        throw std::runtime_error("LinkedList: Head() index out of range");
+        throw LinkedListError("Head(): index out of range");
     return _head->value;
 }
 
 template <typename T>
 const T& LinkedList<T>::Head() const {
     if (_head == nullptr)
-        throw std::runtime_error("LinkedList: Head() index out of range");
+        throw LinkedListError("Head(): index out of range");
     return _head->value;
 }
 
 template <typename T>
 T& LinkedList<T>::Tail() {
     if (_tail == nullptr)
-        throw std::runtime_error("LinkedList: Tail() index out of range");
+        throw LinkedListError("Tail(): index out of range");
     return _tail->value;
 }
 
 template <typename T>
 const T& LinkedList<T>::Tail() const {
     if (_tail == nullptr)
-        throw std::runtime_error("LinkedList: Tail() index out of range");
+        throw LinkedListError("Tail(): index out of range");
     return _tail->value;
 }
 
@@ -55,7 +54,7 @@ void LinkedList<T>::Push(const T& element) noexcept {
 template <typename T>
 void LinkedList<T>::Pop() {
     if (_head == nullptr)
-        throw std::runtime_error("LinkedList: Pop() index out of range");
+        throw LinkedListError("Pop(): index out of range");
     CutNode(_head);
     if (_head == nullptr) _tail = nullptr;
 }
@@ -73,9 +72,7 @@ void LinkedList<T>::Pop(unsigned int number) {
     while (number-- > 0) {
         if (_head == nullptr) {
             _tail = nullptr;
-            throw std::runtime_error(
-                "LinkedList: Pop(unsigned int) index out of range"
-            );
+            throw LinkedListError("Pop(unsigned int): index out of range");
         }
         CutNode(_head);
     }
@@ -101,10 +98,9 @@ void LinkedList<T>::Remove(unsigned int index, unsigned int number) {
     if (index == 0) {
         try {
             Pop(number);
-        } catch (const std::runtime_error&) {
-            throw std::runtime_error(
-                "LinkedList: Remove(unsigned int, unsigned int) "
-                "index out of range"
+        } catch (const LinkedListError&) {
+            throw LinkedListError(
+                "Remove(unsigned int, unsigned int): index out of range"
             );
         }
         return;
@@ -113,9 +109,8 @@ void LinkedList<T>::Remove(unsigned int index, unsigned int number) {
     /* Get the element before the removable */
     Node* before_removable = _head;
     while (index-- > 1) {
-        if (before_removable == nullptr) throw std::runtime_error(
-                "LinkedList: Remove(unsigned int, unsigned int) "
-                "index out of range"
+        if (before_removable == nullptr) throw LinkedListError(
+                "Remove(unsigned int, unsigned int): index out of range"
             );
         before_removable = before_removable->next;
     }
@@ -123,9 +118,8 @@ void LinkedList<T>::Remove(unsigned int index, unsigned int number) {
     /* Remove elements */
     while (number-- > 0) {
       if ((before_removable == nullptr) || !before_removable->next)
-        throw std::runtime_error(
-            "LinkedList: Remove(unsigned int, unsigned int) "
-            "index out of range");
+        throw LinkedListError(
+            "Remove(unsigned int, unsigned int): index out of range");
       CutNode(before_removable->next);
 
       /* If we got the last element, update the tail */
@@ -173,15 +167,15 @@ void LinkedList<T>::Remove(const T& element,
                            bool (*const equal) (const T& e1, const T& e2)) {
     /* Check the equal function */
     if (equal == nullptr)
-        throw std::runtime_error(
-            "LinkedList::Remove(const T&, bool (*)(const T&, const T&)): "
+        throw LinkedListError(
+            "Remove(const T&, bool (*)(const T&, const T&)): "
             "equal function == nullptr"
         );
 
     /* If the list is empty */
     if (_head == nullptr)
-        throw std::runtime_error(
-            "LinkedList::Remove(const T&, bool (*)(const T&, const T&)): "
+        throw LinkedListError(
+            "Remove(const T&, bool (*)(const T&, const T&)): "
             "no such an element"
         );
 
@@ -198,8 +192,8 @@ void LinkedList<T>::Remove(const T& element,
 
     /* If there is no such an element */
     if (before_removable->next == nullptr)
-        throw std::runtime_error(
-            "LinkedList::Remove(const T&, bool (*)(const T&, const T&)): "
+        throw LinkedListError(
+            "Remove(const T&, bool (*)(const T&, const T&)): "
             "no such an element"
         );
 
@@ -214,7 +208,7 @@ template <typename T>
 void LinkedList<T>::PopTail() {
     /* If the list is empty */
     if (_head == nullptr)
-        throw std::runtime_error("LinkedList: PopTail() index out of range");
+        throw LinkedListError("PopTail(): index out of range");
 
     /* If we have only one element */
     if (!_head->next) {
@@ -262,8 +256,9 @@ T& LinkedList<T>::Get(unsigned int index) {
     while (index-- > 0) {
         node_ptr = node_ptr->next;
         if (node_ptr == nullptr)
-            throw std::runtime_error(
-                "LinkedList: operator[](unsigned int) index out of range");
+            throw LinkedListError(
+                "operator[](unsigned int): index out of range"
+            );
     }
     return node_ptr->value;
 }
@@ -274,8 +269,9 @@ const T& LinkedList<T>::Get(unsigned int index) const {
     while (index-- > 0) {
         node_ptr = node_ptr->next;
         if (node_ptr == nullptr)
-            throw std::runtime_error(
-                "LinkedList: operator[](unsigned int) index out of range");
+            throw LinkedListError(
+                "operator[](unsigned int): index out of range"
+            );
     }
     return node_ptr->value;
 }

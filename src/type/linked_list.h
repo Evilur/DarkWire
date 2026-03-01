@@ -70,7 +70,7 @@ public:
     Iterator end() const noexcept;
 
 protected:
-    struct Node {
+    struct Node final {
         explicit Node(const T& value) noexcept;
 
         T value;

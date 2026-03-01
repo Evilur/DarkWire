@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dictionary.h"
+#include "exception/dictionary_error.h"
 #include "util/equal.h"
 #include "util/hash.h"
 
@@ -19,8 +20,8 @@ void Dictionary<K, T, S>::Put(const K& key, const T& element) {
     /* Try to get the node from the linked list */
     for (const Node& node : _buckets[hash])
         if (equal(node.key, key))
-            throw std::runtime_error(
-                "Dictionary: Put() an element with such a key already exists"
+            throw DictionaryError(
+                "Put(): An element with such a key already exists"
             );
 
     /* If there is no an element with such a key yet,
@@ -39,7 +40,7 @@ T& Dictionary<K, T, S>::Get(const K& key) {
             return node.element;
 
     /* If there is NOT an element in the linked list, throw an error */
-    throw std::runtime_error("Dictionary::Get() no such an element");
+    throw DictionaryError("Get(): no such an element");
 }
 
 template <typename K, typename T, typename S>
@@ -53,7 +54,7 @@ const T& Dictionary<K, T, S>::Get(const K& key) const {
             return node.element;
 
     /* If there is NOT an element in the linked list, throw an error */
-    throw std::runtime_error("Dictionary::Get() no such an element");
+    throw DictionaryError("Get(): no such an element");
 }
 
 template <typename K, typename T, typename S>
@@ -88,7 +89,7 @@ void Dictionary<K, T, S>::Delete(const K& key) {
 
     /* Throw an error if there is no an element with such a key */
     if (!has_element)
-        throw std::runtime_error("Dictionary::Delete() no such an element");
+        throw DictionaryError("Delete(): no such an element");
 
     /* If all is OK delete the element with such an index from the bucket */
     _buckets[hash].Remove(index);

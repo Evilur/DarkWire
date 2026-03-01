@@ -30,14 +30,14 @@ public:
      * Put an element into the hash map
      * @param key The key that can be used to retrieve the element
      * @param element Element to put into the map
-     * @throw std::runtime_error If there is already an element with such a key
+     * @throw DictionaryError If there is already an element with such a key
      */
     void Put(const K& key, const T& element);
 
     /**
      * Get the element from the hash map by the key
      * @param key The key to get the element by
-     * @throw std::runtime_error If there is no an element with such a key
+     * @throw DictionaryError If there is no an element with such a key
      * @return Element with such a key, nullptr if there is no such element
      */
     T& Get(const K& key);
@@ -45,7 +45,7 @@ public:
     /**
      * Get the element from the hash map by the key
      * @param key The key to get the element by
-     * @throw std::runtime_error If there is no an element with such a key
+     * @throw DictionaryError If there is no an element with such a key
      * @return Element with such a key, nullptr if there is no such element
      */
     const T& Get(const K& key) const;
@@ -118,7 +118,7 @@ private:
     /**
      * Node to keep the element and its key in the linked list
      */
-    struct Node {
+    struct Node final {
         K key;
         T element;
     };
