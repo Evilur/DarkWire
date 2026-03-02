@@ -34,9 +34,6 @@ void up_interface() {
     tun = new TUN(interface_name);
     tun->Up();
 
-    /* Run the TUN read loop */
-    std::thread(&TUN::RunReadLoop, tun).detach();
-
     /* Exec the PostUp command */
     const char* const post_up = Config::Interface::post_up;
     if (*post_up != '\0') System::Exec(post_up);
