@@ -47,14 +47,11 @@ void TUN::Up() noexcept {
                                 netmask,
                                 _tun_name.CStr()));
     System::Exec(String::Format("ip link set %s up", _tun_name.CStr()));
-    INFO_LOG("Interface [%s] is up", interface_name.CStr());
+    INFO_LOG("Interface [%s] is up", _tun_name.CStr());
+    _is_up = true;
 }
 
-void TUN::Down() noexcept {
-    System::Exec(String::Format("ip addr del dev %s", _tun_name.CStr()));
-    System::Exec(String::Format("ip link set %s down", _tun_name.CStr()));
-    INFO_LOG("Interface [%s] is down", interface_name.CStr());
-}
+bool TUN::IsUp() const noexcept { return _is_up; }
 
 int TUN::Read(char* const buffer, const unsigned int mtu) const noexcept {
     return (int)read(_tun_fd, buffer, mtu);

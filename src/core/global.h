@@ -33,8 +33,6 @@ extern struct Broadcast {
 
 extern unsigned char netmask;
 
-extern String interface_name;
-
 extern TUN* tun;
 
 extern const Keys* static_keys;

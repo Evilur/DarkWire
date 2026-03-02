@@ -13,6 +13,7 @@
 #include <cstring>
 #include <exception>
 #include <fstream>
+#include <netinet/ip.h>
 #include <sodium.h>
 #include <thread>
 
@@ -333,8 +334,8 @@ static inline int handle_config(const char* const name) {
         calc_net();
     }
 
-    /* Set the tune name and return the success code */
-    interface_name = config_path.stem().c_str();
+    /* Create the interface and return the success code */
+    tun = new TUN(config_path.stem().c_str());
     return 0;
 }
 
@@ -350,7 +351,21 @@ static inline int run_client() {
     std::thread(Client::RunHandlePackagesLoop).detach();
 
     /* Handle incoming packages from the TUN */
+    const unsigned int MTU = (unsigned int)Config::Interface::mtu;
+    char* buffer = new char[MTU];
     for (;;) {
+        /* Read the package to the buffer from the TUN */
+        const int package_size = tun->Read(buffer, MTU);
+
+        /* Cast the buffer to the ip header struct */
+        const iphdr* const ip_header = (const iphdr*)(const void*)buffer;
+
+        /* Get the destinastion ip (int the host bytes order) */
+        const unsigned int destinastion_ip = ntohl(ip_header->daddr);
+
+        /* Drop multicasts */
+        if (destinastion_ip >= 0xe0000000 && destinastion_ip <= 0xefffffff)
+            continue;
     }
 
     return -1;
@@ -367,7 +382,21 @@ static inline int run_server() {
     std::thread(Server::RunHandlePackagesLoop).detach();
 
     /* Handle incoming packages from the TUN */
+    const unsigned int MTU = (unsigned int)Config::Interface::mtu;
+    char* buffer = new char[MTU];
     for (;;) {
+        /* Read the package to the buffer from the TUN */
+        const int package_size = tun->Read(buffer, MTU);
+
+        /* Cast the buffer to the ip header struct */
+        const iphdr* const ip_header = (const iphdr*)(const void*)buffer;
+
+        /* Get the destinastion ip (int the host bytes order) */
+        const unsigned int destinastion_ip = ntohl(ip_header->daddr);
+
+        /* Drop multicasts */
+        if (destinastion_ip >= 0xe0000000 && destinastion_ip <= 0xefffffff)
+            continue;
     }
 
     return -1;

@@ -3,8 +3,6 @@
 #include "core/tun.h"
 #include "util/system.h"
 
-#include <thread>
-
 Mode mode = CLIENT;
 
 IpAddress ip_address = { .hb = INADDR_ANY, .nb = INADDR_ANY };
@@ -17,8 +15,6 @@ Broadcast broadcast = { .hb = INADDR_ANY, .nb = INADDR_ANY };
 
 unsigned char netmask = 0;
 
-String interface_name(0UL);
-
 TUN* tun = nullptr;
 
 const Keys* static_keys = nullptr;
@@ -30,8 +26,7 @@ void up_interface() {
     const char* const pre_up = Config::Interface::pre_up;
     if (*pre_up != '\0') System::Exec(pre_up);
 
-    /* Create the interface */
-    tun = new TUN(interface_name);
+    /* Up the interface */
     tun->Up();
 
     /* Exec the PostUp command */

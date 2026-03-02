@@ -17,11 +17,13 @@ public:
 
     void Up() noexcept;
 
-    void Down() noexcept;
+    [[nodiscard]] bool IsUp() const noexcept;
 
     int Read(char* buffer, unsigned int mtu) const noexcept;
 
 private:
     const String _tun_name;
     const int _tun_fd;
+
+    bool _is_up = false;
 };
