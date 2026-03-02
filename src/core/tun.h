@@ -19,9 +19,7 @@ public:
 
     void Down() noexcept;
 
-    void RunReadLoop() const;
-
-    void Write() noexcept;
+    int Read(char* buffer, unsigned int mtu) const noexcept;
 
 private:
     const String _tun_name;

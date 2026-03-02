@@ -129,19 +129,22 @@ const noexcept {
 void UDPSocket::Send(const char* const buffer, const long buffer_size,
                      const sockaddr_in& address) const noexcept {
     /* Send the data */
-    const long result  = sendto(_socket_fd, buffer,
-                                (unsigned long)buffer_size, 0,
-                                (const sockaddr*)&address,
-                                sizeof(sockaddr_in));
+    const long result = sendto(_socket_fd, buffer,
+                               (unsigned long)buffer_size, 0,
+                               (const sockaddr*)&address,
+                               sizeof(sockaddr_in));
 
     /* Print the log */
 #if LOG_LEVEL == 0
-    if (result != -1) {
-        TRACE_LOG("Send %lu bytes to %s:%hu",
+    if (result != -1)
+        TRACE_LOG("Send %ld bytes to %s:%hu",
                   result,
                   inet_ntoa(address.sin_addr),
                   ntohs(address.sin_port));
-    }
+    else WARN_LOG("Failed to send %ld bytes to %s:%hu",
+                  buffer_size,
+                  inet_ntoa(address.sin_addr),
+                  ntohs(address.sin_port));
 #endif
 }
 
@@ -154,15 +157,19 @@ const noexcept {
 
     /* Print the log */
 #if LOG_LEVEL == 0
-    if (result != -1) {
-        sockaddr_in address;
-        socklen_t address_len = sizeof(address);
-        getpeername(_socket_fd, (sockaddr*)&address, &address_len);
-        TRACE_LOG("Send %lu bytes to %s:%hu",
+    sockaddr_in address;
+    socklen_t address_len = sizeof(address);
+    getpeername(_socket_fd, (sockaddr*)&address, &address_len);
+    if (result != -1)
+        TRACE_LOG("Send %ld bytes to %s:%hu",
                   result,
                   inet_ntoa(address.sin_addr),
                   ntohs(address.sin_port));
-    }
+    else WARN_LOG("Failed to send %ld bytes to %s:%hu",
+                  buffer_size,
+                  inet_ntoa(address.sin_addr),
+                  ntohs(address.sin_port));
+
 #endif
 }
 
@@ -184,7 +191,7 @@ void UDPSocket::Close() noexcept {
 
 sockaddr_in UDPSocket::GetAddress(const char* const str) {
     /* Store the result */
-    sockaddr_in result;
+    sockaddr_in result { AF_INET };
 
     /* Get the ip */
     char ip_ptr[] = "255.255.255.255:65535";

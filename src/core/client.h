@@ -21,9 +21,7 @@ public:
 
     static void RunHandshakeLoop();
 
-    static void HandlePackage(const char* buffer,
-                              int buffer_size,
-                              const sockaddr_in& from);
+    static void RunHandlePackagesLoop();
 
 private:
     struct Server {

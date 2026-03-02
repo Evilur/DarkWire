@@ -346,18 +346,11 @@ static inline int run_client() {
      * and every 3 minutes at all */
     std::thread(Client::RunHandshakeLoop).detach();
 
-    /* Allocate the memory for the buffer */
-    char* buffer = new char[(unsigned int)Config::Interface::mtu];
+    /* Handle all incoming packages in another thread */
+    std::thread(Client::RunHandlePackagesLoop).detach();
 
-    /* Start receiving packages */
+    /* Handle incoming packages from the TUN */
     for (;;) {
-        /* Recieve the request from a client */
-        sockaddr_in from;
-        const int buffer_size = main_socket.Receive(buffer, &from);
-
-        /* Handle the package */
-        if (buffer_size != -1)
-            Client::HandlePackage(buffer, buffer_size, from);
     }
 
     return -1;
@@ -370,18 +363,11 @@ static inline int run_server() {
     /* Init the server */
     Server::Init();
 
-    /* Allocate the memory for the buffer */
-    char* buffer = new char[(unsigned int)Config::Interface::mtu];
+    /* Handle all incoming packages in another thread */
+    std::thread(Server::RunHandlePackagesLoop).detach();
 
-    /* Start receiving packages */
+    /* Handle incoming packages from the TUN */
     for (;;) {
-        /* Recieve the request from a client */
-        sockaddr_in from;
-        const int buffer_size = main_socket.Receive(buffer, &from);
-
-        /* Handle the package */
-        if (buffer_size != -1)
-            Server::HandlePackage(buffer, buffer_size, from);
     }
 
     return -1;

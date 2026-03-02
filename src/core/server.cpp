@@ -1,4 +1,5 @@
 #include "server.h"
+#include "core/config.h"
 #include "core/global.h"
 #include "core/keys.h"
 #include "package/handshake_response.h"
@@ -45,23 +46,35 @@ void Server::Init() {
     Peers::peers->Put(ip_address.nb, {});
 }
 
-void Server::HandlePackage(const char* const buffer, const int buffer_size,
-                           const sockaddr_in& client) {
-    /* Get the type of the package */
-    const unsigned char raw_type = *(const unsigned char*)buffer;
-    if (raw_type > TRANSFER_DATA) return;
-    const PackageType type = (PackageType)raw_type;
+void Server::RunHandlePackagesLoop() {
+    /* Allocate the memory for the buffer */
+    char* buffer = new char[(unsigned int)Config::Interface::mtu];
+
+    /* Start receiving packages */
+    for (;;) {
+        /* Recieve the request from a client */
+        sockaddr_in from;
+        const int buffer_size = main_socket.Receive(buffer, &from);
+
+        /* If there is an error */
+        if (buffer_size == -1) continue;
+
+        /* Get the type of the package */
+        const unsigned char raw_type = *(const unsigned char*)buffer;
+        if (raw_type > TRANSFER_DATA) return;
+        const PackageType type = (PackageType)raw_type;
 
 #define COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(T)                                  \
-    {                                                                         \
-        T* request = new T(*(const T*)(const void*)buffer);                   \
-        std::thread(&Handle##T, request, client).detach();                    \
-    }
+        {                                                                     \
+            T* request = new T(*(const T*)(const void*)buffer);               \
+            std::thread(&Handle##T, request, from).detach();                  \
+        }
 
-    /* Handle the package by its type */
-    if (type == HANDSHAKE_REQUEST)
-        if (buffer_size == sizeof(HandshakeRequest))
-            COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(HandshakeRequest);
+        /* Handle the package by its type */
+        if (type == HANDSHAKE_REQUEST)
+            if (buffer_size == sizeof(HandshakeRequest))
+                COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(HandshakeRequest);
+    }
 }
 
 void Server::HandleHandshakeRequest(

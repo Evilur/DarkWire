@@ -15,11 +15,11 @@
 
 void Client::Init() {
     /* Get the address */
-    Server::endpoint =
-        UDPSocket::GetAddress(Config::Server::endpoint);
+    Server::endpoint = UDPSocket::GetAddress(Config::Server::endpoint);
 
     /* Allocate memory for keys */
-    Server::public_key = new unsigned char[crypto_scalarmult_BYTES];
+    Server::public_key =
+        new unsigned char[crypto_scalarmult_BYTES];
     Server::chain_key =
         new unsigned char[crypto_aead_chacha20poly1305_KEYBYTES];
 
@@ -90,25 +90,36 @@ void Client::RunHandshakeLoop() {
     }
 }
 
-void Client::HandlePackage(const char* const buffer,
-                           const int buffer_size,
-                           const sockaddr_in& from) {
-    /* Get the type of the package */
-    const unsigned char raw_type = *(const unsigned char*)buffer;
-    if (raw_type > TRANSFER_DATA) return;
-    const PackageType type = (PackageType)raw_type;
+void Client::RunHandlePackagesLoop() {
+    /* Allocate the memory for the buffer */
+    char* buffer = new char[(unsigned int)Config::Interface::mtu];
+
+    /* Start receiving packages */
+    for (;;) {
+        /* Recieve the request from a client */
+        sockaddr_in from;
+        const int buffer_size = main_socket.Receive(buffer, &from);
+
+        /* If there is an error */
+        if (buffer_size == -1) continue;
+
+        /* Get the type of the package */
+        const unsigned char raw_type = *(const unsigned char*)buffer;
+        if (raw_type > TRANSFER_DATA) return;
+        const PackageType type = (PackageType)raw_type;
 
 #define COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(T)                                  \
-    {                                                                         \
-        T* request = new T(*(const T*)(const void*)buffer);                   \
-        std::thread(&Handle##T, request, from).detach();                      \
-    }
+        {                                                                     \
+            T* request = new T(*(const T*)(const void*)buffer);               \
+            std::thread(&Handle##T, request, from).detach();                  \
+        }
 
-    /* Handle the package by its type */
-    if (type == HANDSHAKE_RESPONSE)
-        if (buffer_size == sizeof(HandshakeResponse)
-            && equal(from, Server::endpoint))
-            COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(HandshakeResponse);
+        /* Handle the package by its type */
+        if (type == HANDSHAKE_RESPONSE)
+            if (buffer_size == sizeof(HandshakeResponse)
+                && equal(from, Server::endpoint))
+                    COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(HandshakeResponse);
+    }
 }
 
 void Client::HandleHandshakeResponse(const UniqPtr<HandshakeResponse> response,

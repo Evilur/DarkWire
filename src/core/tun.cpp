@@ -56,24 +56,6 @@ void TUN::Down() noexcept {
     INFO_LOG("Interface [%s] is down", interface_name.CStr());
 }
 
-void TUN::RunReadLoop() const {
-    const unsigned int MTU = (unsigned int)Config::Interface::mtu;
-    char* const buffer = new char[MTU];
-    for (;;) {
-        /* Get the ip package */
-        const int buffer_size = (int)read(_tun_fd, buffer, MTU);
-        const iphdr* const ip_header = (const iphdr*)(const void*)buffer;
-
-        /* Get the destinastion ip (int the host bytes order) */
-        const unsigned int destinastion_ip = ntohl(ip_header->daddr);
-
-        /* Drop multicasts */
-        if (destinastion_ip >= 0xE0000000 && destinastion_ip <= 0xEFFFFFFF)
-            continue;
-
-        /* Handle the buffer */
-    }
-}
-
-void TUN::Write() noexcept {
+int TUN::Read(char* const buffer, const unsigned int mtu) const noexcept {
+    return (int)read(_tun_fd, buffer, mtu);
 }
