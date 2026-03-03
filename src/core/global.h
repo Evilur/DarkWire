@@ -3,7 +3,7 @@
 #include "socket/udp_socket.h"
 #include "core/keys.h"
 #include "core/tun.h"
-#include "type/string.h"
+#include "type/net_addr.h"
 
 #include <netinet/in.h>
 
@@ -11,25 +11,13 @@ enum Mode : char { CLIENT, SERVER };
 
 extern Mode mode;
 
-extern struct IpAddress {
-    unsigned int hb;
-    unsigned int nb;
-} __attribute__((aligned(8))) ip_address;
+extern NetAddr ip_address;
 
-extern struct Binmask {
-    unsigned int hb;
-    unsigned int nb;
-} __attribute__((aligned(8))) binmask;
+extern NetAddr binmask;
 
-extern struct NetworkPrefix {
-    unsigned int hb;
-    unsigned int nb;
-} __attribute__((aligned(8))) network_prefix;
+extern NetAddr network_prefix;
 
-extern struct Broadcast {
-    unsigned int hb;
-    unsigned int nb;
-} __attribute__((aligned(8))) broadcast;
+extern NetAddr broadcast;
 
 extern unsigned char netmask;
 

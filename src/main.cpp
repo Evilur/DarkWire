@@ -321,8 +321,7 @@ static inline int handle_config(const char* const name) {
         *address_buffer_sep = '\0';
 
         /* Set the ip address and the netmask */
-        ip_address.nb = inet_addr(address_buffer);
-        ip_address.hb = ntohl(ip_address.nb);
+        ip_address.SetNetb(inet_addr(address_buffer));
         netmask = (unsigned char)atoi(address_buffer_sep + 1);
 
         if (netmask > 30) {
@@ -360,12 +359,17 @@ static inline int run_client() {
         /* Cast the buffer to the ip header struct */
         const iphdr* const ip_header = (const iphdr*)(const void*)buffer;
 
-        /* Get the destinastion ip (int the host bytes order) */
-        const unsigned int destinastion_ip = ntohl(ip_header->daddr);
+        /* Get the destinastion ip */
+        const unsigned int destinastion_ip_nb = ip_header->daddr;
+        const unsigned int destinastion_ip_hb = ntohl(destinastion_ip_nb);
 
         /* Drop multicasts */
-        if (destinastion_ip >= 0xe0000000 && destinastion_ip <= 0xefffffff)
+        if (destinastion_ip_hb >= 0xe0000000 &&
+            destinastion_ip_hb <= 0xefffffff)
             continue;
+
+        /* Drop broadcast */
+        if (destinastion_ip_hb == broadcast.hostb) continue;
     }
 
     return -1;
@@ -391,12 +395,17 @@ static inline int run_server() {
         /* Cast the buffer to the ip header struct */
         const iphdr* const ip_header = (const iphdr*)(const void*)buffer;
 
-        /* Get the destinastion ip (int the host bytes order) */
-        const unsigned int destinastion_ip = ntohl(ip_header->daddr);
+        /* Get the destinastion ip */
+        const unsigned int destinastion_ip_nb = ip_header->daddr;
+        const unsigned int destinastion_ip_hb = ntohl(destinastion_ip_nb);
 
         /* Drop multicasts */
-        if (destinastion_ip >= 0xe0000000 && destinastion_ip <= 0xefffffff)
+        if (destinastion_ip_hb >= 0xe0000000 &&
+            destinastion_ip_hb <= 0xefffffff)
             continue;
+
+        /* Drop broadcast */
+        if (destinastion_ip_hb == broadcast.hostb) continue;
     }
 
     return -1;

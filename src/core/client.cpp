@@ -165,8 +165,7 @@ void Client::HandleHandshakeResponse(const UniqPtr<HandshakeResponse> response,
     /* If there is the first handshake */
     if (!tun->IsUp()) {
         /* Set the ip and the netmask */
-        ip_address.nb = response->payload.ip;
-        ip_address.hb = ntohl(ip_address.nb);
+        ip_address.SetNetb(response->payload.ip);
         netmask = response->payload.netmask;
 
         /* Calculate net-specific variables */

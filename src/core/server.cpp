@@ -43,7 +43,7 @@ void Server::Init() {
         Peers::timestamps->Put(public_key, 0UL);
 
     /* Add server to the peers list */
-    Peers::peers->Put(ip_address.nb, {});
+    Peers::peers->Put(ip_address.netb, {});
 }
 
 void Server::RunHandlePackagesLoop() {
@@ -192,30 +192,30 @@ void Server::HandleHandshakeRequest(
             response_netmask = netmask;
 
             /* Try to get the random ip in the local network */
-            const unsigned int start = network_prefix.hb;
-            const unsigned int end = broadcast.hb;
+            const unsigned int start = network_prefix.hostb;
+            const unsigned int end = broadcast.hostb;
             _rand_mutex.lock();
             const unsigned int random_ip =
                 (unsigned int)(start + (rand() % (end - start + 1)));
             _rand_mutex.unlock();
-            const unsigned int random_ip_nb = htonl(random_ip);
-            if (!Peers::peers->Has(random_ip_nb)) {
-                response_ip = random_ip_nb;
+            const unsigned int random_ip_netb = htonl(random_ip);
+            if (!Peers::peers->Has(random_ip_netb)) {
+                response_ip = random_ip_netb;
                 goto the_end;
             }
 
             /* Try to get the free ip */
             for (unsigned int ip = random_ip; ip < end; ++ip) {
-                const unsigned int ip_nb = htonl(ip);
-                if (!Peers::peers->Has(ip_nb)) {
-                    response_ip = ip_nb;
+                const unsigned int ip_netb = htonl(ip);
+                if (!Peers::peers->Has(ip_netb)) {
+                    response_ip = ip_netb;
                     goto the_end;
                 }
             }
             for (unsigned int ip = random_ip; ip > start; --ip) {
-                const unsigned int ip_nb = htonl(ip);
-                if (!Peers::peers->Has(ip_nb)) {
-                    response_ip = ip_nb;
+                const unsigned int ip_netb = htonl(ip);
+                if (!Peers::peers->Has(ip_netb)) {
+                    response_ip = ip_netb;
                     goto the_end;
                 }
             }

@@ -5,13 +5,13 @@
 
 Mode mode = CLIENT;
 
-IpAddress ip_address = { .hb = INADDR_ANY, .nb = INADDR_ANY };
+NetAddr ip_address;
 
-Binmask binmask = { .hb = INADDR_ANY, .nb = INADDR_ANY };
+NetAddr binmask;
 
-NetworkPrefix network_prefix = { .hb = INADDR_ANY, .nb = INADDR_ANY };
+NetAddr network_prefix;
 
-Broadcast broadcast = { .hb = INADDR_ANY, .nb = INADDR_ANY };
+NetAddr broadcast;
 
 unsigned char netmask = 0;
 
@@ -35,10 +35,7 @@ void up_interface() {
 }
 
 void calc_net() {
-    binmask.hb = (netmask == 0) ? 0x0U : (~0U << (32U - netmask));
-    network_prefix.hb = ip_address.hb & binmask.hb;
-    broadcast.hb = network_prefix.hb | ~binmask.hb;
-    binmask.nb = htonl(binmask.hb);
-    network_prefix.nb = htonl(network_prefix.hb);
-    broadcast.nb = htonl(broadcast.hb);
+    binmask.SetHostb((netmask == 0) ? 0x0U : (~0U << (32U - netmask)));
+    network_prefix.SetHostb(ip_address.hostb & binmask.hostb);
+    broadcast.SetHostb(network_prefix.hostb | ~binmask.hostb);
 }
