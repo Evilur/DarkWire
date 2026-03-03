@@ -346,6 +346,9 @@ static inline int run_client() {
      * and every 3 minutes at all */
     std::thread(Client::RunHandshakeLoop).detach();
 
+    /* Send keepalive every 30 seconds */
+    std::thread(Client::RunKeepAliveLoop).detach();
+
     /* Handle all incoming packages in another thread */
     std::thread(Client::RunHandlePackagesLoop).detach();
 
@@ -359,17 +362,17 @@ static inline int run_client() {
         /* Cast the buffer to the ip header struct */
         const iphdr* const ip_header = (const iphdr*)(const void*)buffer;
 
-        /* Get the destinastion ip */
-        const unsigned int destinastion_ip_nb = ip_header->daddr;
-        const unsigned int destinastion_ip_hb = ntohl(destinastion_ip_nb);
+        /* Get the destination ip */
+        NetAddr destinastion;
+        destinastion.SetNetb(ip_header->daddr);
 
         /* Drop multicasts */
-        if (destinastion_ip_hb >= 0xe0000000 &&
-            destinastion_ip_hb <= 0xefffffff)
+        if (destinastion.hostb >= 0xe0000000 &&
+            destinastion.hostb <= 0xefffffff)
             continue;
 
         /* Drop broadcast */
-        if (destinastion_ip_hb == broadcast.hostb) continue;
+        if (destinastion.hostb == broadcast.hostb) continue;
     }
 
     return -1;
@@ -395,17 +398,17 @@ static inline int run_server() {
         /* Cast the buffer to the ip header struct */
         const iphdr* const ip_header = (const iphdr*)(const void*)buffer;
 
-        /* Get the destinastion ip */
-        const unsigned int destinastion_ip_nb = ip_header->daddr;
-        const unsigned int destinastion_ip_hb = ntohl(destinastion_ip_nb);
+        /* Get the destination ip */
+        NetAddr destinastion;
+        destinastion.SetNetb(ip_header->daddr);
 
         /* Drop multicasts */
-        if (destinastion_ip_hb >= 0xe0000000 &&
-            destinastion_ip_hb <= 0xefffffff)
+        if (destinastion.hostb >= 0xe0000000 &&
+            destinastion.hostb <= 0xefffffff)
             continue;
 
         /* Drop broadcast */
-        if (destinastion_ip_hb == broadcast.hostb) continue;
+        if (destinastion.hostb == broadcast.hostb) continue;
     }
 
     return -1;

@@ -1,8 +1,12 @@
 #pragma once
 
 #include "package_type.h"
+#include "core/global.h"
 #include "util/nonce.h"
 
+#include <arpa/inet.h>
+#include <cstring>
+#include <ctime>
 #include <netinet/in.h>
 #include <sodium.h>
 
@@ -22,3 +26,25 @@ struct HandshakeRequest final {
 
     explicit HandshakeRequest(const unsigned char* epk, Nonce& nonce) noexcept;
 } __attribute__((packed));
+
+inline HandshakeRequest::HandshakeRequest(const unsigned char* const epk,
+                                          Nonce& nonce) noexcept {
+    /* Set the type */
+    header.type = HANDSHAKE_REQUEST;
+
+    /* Copy the public keys */
+    memcpy(header.ephemeral_public_key, epk, crypto_scalarmult_BYTES);
+    memcpy(payload.static_public_key,
+           static_keys->Public(),
+           crypto_scalarmult_BYTES);
+
+    /* Set the nonce */
+    nonce.Copy(header.nonce);
+
+    /* Set the timestampt */
+    payload.timestamp = (unsigned long)std::time(nullptr);
+
+    /* Set the ip and netmask */
+    payload.ip = ip_address.netb;
+    payload.netmask = netmask;
+}
