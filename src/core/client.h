@@ -6,6 +6,7 @@
 #include "package/handshake_request.h"
 #include "package/handshake_response.h"
 #include "package/keep_alive.h"
+#include "type/dictionary.h"
 #include "type/uniq_ptr.h"
 #include "util/class.h"
 #include "util/equal.h"
@@ -37,6 +38,7 @@ public:
 
 private:
     struct Server {
+        static inline Nonce nonce;
         static inline sockaddr_in endpoint;
         static inline unsigned char* public_key = nullptr;
         static inline unsigned char* chain_key = nullptr;
@@ -50,6 +52,18 @@ private:
         UniqPtr<HandshakeResponse> response,
         sockaddr_in from
     ) noexcept;
+
+    struct Peers {
+        struct Details {
+            sockaddr_in endpoint;
+            unsigned long last_package_timestamp;
+        } __attribute__((aligned(32)));
+
+        static inline Dictionary<unsigned int,
+                                 Details,
+                                 unsigned int>* peers = nullptr;
+    };
+
 };
 
 inline void Client::Init() {
@@ -68,6 +82,11 @@ inline void Client::Init() {
                       public_key_base64, strlen(public_key_base64),
                       nullptr, nullptr, nullptr,
                       sodium_base64_VARIANT_ORIGINAL);
+
+    /* Allocate memory for peers */
+    Peers::peers = new Dictionary<unsigned int,
+                                  Peers::Details,
+                                  unsigned int>(8);
 }
 
 inline void Client::RunHandshakeLoop() {
@@ -87,10 +106,11 @@ inline void Client::RunHandshakeLoop() {
         Server::ephemeral_keys = new Keys();
 
         /* Initialize the nonce */
-        Nonce nonce;
+        Server::nonce = Nonce();
 
         /* Fill the request */
-        HandshakeRequest request(Server::ephemeral_keys->Public(), nonce);
+        HandshakeRequest request(Server::ephemeral_keys->Public(),
+                                 Server::nonce);
 
         /* Compute the first shared secret */
         unsigned char shared[crypto_scalarmult_BYTES];
@@ -219,7 +239,7 @@ inline void Client::HandleHandshakeResponse(
     /* If there is the first handshake */
     if (!tun->IsUp()) {
         /* Set the ip and the netmask */
-        ip_address.SetNetb(response->payload.ip);
+        local_ip.SetNetb(response->payload.local_ip);
         netmask = response->payload.netmask;
 
         /* Calculate net-specific variables */
@@ -227,6 +247,12 @@ inline void Client::HandleHandshakeResponse(
 
         /* Up the interface */
         up_interface();
+
+        /* Add the server to the peers list */
+        Peers::peers->Put(response->payload.server_local_ip, {
+            .endpoint = Server::endpoint,
+            .last_package_timestamp = (unsigned long)std::time(nullptr)
+        });
     }
 
     /* If all is OK, next handshake will be after 3 minutes */

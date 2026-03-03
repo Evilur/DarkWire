@@ -45,6 +45,6 @@ inline HandshakeRequest::HandshakeRequest(const unsigned char* const epk,
     payload.timestamp = (unsigned long)std::time(nullptr);
 
     /* Set the ip and netmask */
-    payload.ip = ip_address.netb;
+    payload.ip = local_ip.netb;
     payload.netmask = netmask;
 }

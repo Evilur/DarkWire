@@ -11,7 +11,7 @@ enum Mode : char { CLIENT, SERVER };
 
 extern Mode mode;
 
-extern NetAddr ip_address;
+extern NetAddr local_ip;
 
 extern NetAddr binmask;
 

@@ -5,7 +5,7 @@
 
 Mode mode = CLIENT;
 
-NetAddr ip_address;
+NetAddr local_ip;
 
 NetAddr binmask;
 
@@ -36,6 +36,6 @@ void up_interface() {
 
 void calc_net() {
     binmask.SetHostb((netmask == 0) ? 0x0U : (~0U << (32U - netmask)));
-    network_prefix.SetHostb(ip_address.hostb & binmask.hostb);
+    network_prefix.SetHostb(local_ip.hostb & binmask.hostb);
     broadcast.SetHostb(network_prefix.hostb | ~binmask.hostb);
 }

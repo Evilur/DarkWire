@@ -298,8 +298,8 @@ static inline int handle_config(const char* const name) {
     }
 
     /* Check the MTU */
-    if (Config::Interface::mtu > 1480) {
-        FATAL_LOG("MTU can not be more than 1480");
+    if (Config::Interface::mtu > 1472) {
+        FATAL_LOG("MTU can not be more than 1472");
         return -1;
     }
 
@@ -321,7 +321,7 @@ static inline int handle_config(const char* const name) {
         *address_buffer_sep = '\0';
 
         /* Set the ip address and the netmask */
-        ip_address.SetNetb(inet_addr(address_buffer));
+        local_ip.SetNetb(inet_addr(address_buffer));
         netmask = (unsigned char)atoi(address_buffer_sep + 1);
 
         if (netmask > 30) {

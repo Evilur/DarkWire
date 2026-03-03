@@ -14,9 +14,9 @@ Address = 10.0.0.1/24
 Listen = 58094
 
 # Maximum transmission unit
-# Do not change the value until you are sure
-# Default: 58094
-MTU = 1420
+# This value can't be more than 1472
+# Default: 1472
+MTU = 1472
 
 # Scripts to run before/after the interface is up/down
 # *Not necessary
