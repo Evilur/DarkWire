@@ -373,6 +373,9 @@ static inline int run_client() {
 
         /* Drop broadcast */
         if (destinastion.hostb == broadcast.hostb) continue;
+
+        /* Handle the TUN package */
+        Client::HandleTunPackage(buffer, package_size, destinastion.netb);
     }
 
     return -1;
@@ -409,6 +412,9 @@ static inline int run_server() {
 
         /* Drop broadcast */
         if (destinastion.hostb == broadcast.hostb) continue;
+
+        /* Handle the TUN package */
+        Server::HandleTunPackage(buffer, package_size, destinastion.netb);
     }
 
     return -1;

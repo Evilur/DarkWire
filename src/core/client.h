@@ -3,9 +3,11 @@
 #include "core/config.h"
 #include "core/global.h"
 #include "core/keys.h"
+#include "core/tun.h"
 #include "package/handshake_request.h"
 #include "package/handshake_response.h"
 #include "package/keep_alive.h"
+#include "package/transfer_data.h"
 #include "type/dictionary.h"
 #include "type/uniq_ptr.h"
 #include "util/class.h"
@@ -36,6 +38,10 @@ public:
 
     inline static void RunKeepAliveLoop() noexcept;
 
+    inline static void HandleTunPackage(const char* buffer,
+                                        unsigned int buffer_size,
+                                        unsigned int destination_netb);
+
 private:
     struct Server {
         static inline Nonce nonce;
@@ -43,6 +49,7 @@ private:
         static inline unsigned char* public_key = nullptr;
         static inline unsigned char* chain_key = nullptr;
         static inline UniqPtr<Keys> ephemeral_keys = nullptr;
+        static inline std::mutex mutex;
     };
 
     static inline unsigned long _next_handshake_timestamp =
@@ -57,11 +64,14 @@ private:
         struct Details {
             sockaddr_in endpoint;
             unsigned long last_package_timestamp;
+            unsigned char* key;
+            Nonce nonce;
         } __attribute__((aligned(32)));
 
         static inline Dictionary<unsigned int,
                                  Details,
                                  unsigned int>* peers = nullptr;
+        static inline std::mutex mutex;
     };
 
 };
@@ -84,6 +94,7 @@ inline void Client::Init() {
                       sodium_base64_VARIANT_ORIGINAL);
 
     /* Allocate memory for peers */
+    std::lock_guard peers_lock(Peers::mutex);
     Peers::peers = new Dictionary<unsigned int,
                                   Peers::Details,
                                   unsigned int>(8);
@@ -100,6 +111,9 @@ inline void Client::RunHandshakeLoop() {
             continue;
         }
 
+        /* Lock the server */
+        Server::mutex.unlock();
+        Server::mutex.lock();
         INFO_LOG("Sending a handshake request to the server");
 
         /* Generate the ephemeral keys pair */
@@ -167,6 +181,7 @@ inline void Client::RunHandlePackagesLoop() {
         if (raw_type > TRANSFER_DATA) return;
         const PackageType type = (PackageType)raw_type;
 
+#undef COPY_BUFFER_TO_HEAP_AND_HANDLE_IT
 #define COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(T)                                  \
         {                                                                     \
             T* request = new T(*(const T*)(const void*)buffer);               \
@@ -192,6 +207,57 @@ inline void Client::RunKeepAliveLoop() noexcept {
                          sizeof(keepalive_package),
                          Server::endpoint);
     }
+}
+
+inline void Client::HandleTunPackage(const char* const buffer,
+                                     const unsigned int buffer_size,
+                                     const unsigned int destination_netb) {
+    /* Try to get the details from the peers list */
+    sockaddr_in endpoint;
+    const unsigned char* key;
+    Nonce* nonce;
+    try {
+        std::lock_guard peers_lock(Peers::mutex);
+        Peers::Details& details = Peers::peers->Get(destination_netb);
+        endpoint = details.endpoint;
+        key = details.key;
+        nonce = &details.nonce;
+    /* If there is no such an ip in the dictionary */
+    } catch (const DictionaryError&) {
+        endpoint = Server::endpoint;
+        key = Server::chain_key;
+        nonce = &Server::nonce;
+
+        /* TODO */
+        /* Get the peer from the server */
+    }
+
+    TRACE_LOG("Sending the transfer data to the %s:%hu",
+              inet_ntoa(endpoint.sin_addr),
+              ntohs(endpoint.sin_port));
+
+    /* Assemble the transfer data package */
+    TransferData package(*nonce, buffer, buffer_size);
+    const unsigned int package_size = package.Size(buffer_size);
+
+    /* Encrypt the package */
+    unsigned long long dummy_len;
+    crypto_aead_chacha20poly1305_ietf_encrypt(
+        (unsigned char*)(void*)&package.payload,
+        &dummy_len,
+        (unsigned char*)(void*)&package.payload,
+        buffer_size,
+        (unsigned char*)(void*)&package.header,
+        sizeof(package.header),
+        nullptr,
+        package.header.nonce,
+        key
+    );
+
+    /* Send the encrypted message */
+    main_socket.Send((char*)(void*)&package,
+                     package_size,
+                     endpoint);
 }
 
 inline void Client::HandleHandshakeResponse(
@@ -249,13 +315,17 @@ inline void Client::HandleHandshakeResponse(
         up_interface();
 
         /* Add the server to the peers list */
+        std::lock_guard peers_lock(Peers::mutex);
         Peers::peers->Put(response->payload.server_local_ip, {
             .endpoint = Server::endpoint,
-            .last_package_timestamp = (unsigned long)std::time(nullptr)
+            .last_package_timestamp = ULONG_MAX,
+            .key = Server::chain_key,
+            .nonce = Server::nonce
         });
     }
 
     /* If all is OK, next handshake will be after 3 minutes */
     INFO_LOG("The handshake response has been successfully handled");
-    _next_handshake_timestamp += 180;
+    _next_handshake_timestamp = (unsigned long)std::time(nullptr) + 180;
+    Server::mutex.unlock();
 }

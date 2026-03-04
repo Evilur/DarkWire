@@ -1,11 +1,13 @@
 #pragma once
 
 #include "socket/udp_socket.h"
-#include "core/keys.h"
-#include "core/tun.h"
 #include "type/net_addr.h"
 
 #include <netinet/in.h>
+
+class TUN;
+
+class Keys;
 
 enum Mode : char { CLIENT, SERVER };
 

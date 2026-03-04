@@ -12,13 +12,14 @@ struct TransferData final {
         unsigned char nonce[crypto_aead_chacha20poly1305_ietf_NPUBBYTES];
     } __attribute__((packed)) header;
     struct {
-        char buffer[1472];
+        char buffer[1472 + crypto_aead_chacha20poly1305_ietf_ABYTES];
     } __attribute__((packed)) payload;
-    unsigned char poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
     explicit TransferData(Nonce& nonce,
                           const char* buffer,
                           unsigned int buffer_size) noexcept;
+
+    [[nodiscard]] unsigned int Size(unsigned int buffer_size) const noexcept;
 } __attribute__((packed));
 
 inline TransferData::TransferData(Nonce& nonce,
@@ -27,4 +28,11 @@ inline TransferData::TransferData(Nonce& nonce,
     header.type = TRANSFER_DATA;
     nonce.Copy(header.nonce);
     memcpy(payload.buffer, buffer, buffer_size);
+}
+
+inline unsigned int TransferData::Size(const unsigned int buffer_size)
+const noexcept {
+    return sizeof(header) +
+           buffer_size +
+           crypto_aead_chacha20poly1305_ietf_ABYTES;
 }

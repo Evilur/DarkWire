@@ -3,12 +3,14 @@
 #include "core/config.h"
 #include "core/global.h"
 #include "core/keys.h"
+#include "core/tun.h"
 #include "package/handshake_request.h"
 #include "package/handshake_response.h"
 #include "package/package_type.h"
+#include "package/transfer_data.h"
 #include "type/dictionary.h"
 #include "type/linked_list.h"
-#include "type/uniq_ptr_imp.h"
+#include "type/uniq_ptr.h"
 #include "util/class.h"
 #include "util/hkdf.h"
 #include "util/logger.h"
@@ -16,6 +18,7 @@
 #include <cstring>
 #include <mutex>
 #include <netinet/in.h>
+#include <netinet/ip.h>
 #include <thread>
 
 /**
@@ -32,6 +35,10 @@ public:
 
     inline static void RunHandlePackagesLoop();
 
+    inline static void HandleTunPackage(const char* buffer,
+                                        int package_size,
+                                        unsigned int destimation_netb);
+
 private:
     struct Peers {
         struct Details {
@@ -46,16 +53,27 @@ private:
         static inline std::mutex public_keys_mutex;
         static inline Dictionary<unsigned int,
                                  Details,
-                                 unsigned int>* peers = nullptr;
-        static inline std::mutex peers_mutex;
+                                 unsigned int>* details = nullptr;
+        static inline std::mutex details_mutex;
         static inline Dictionary<KeyBuffer,
                                  unsigned long,
                                  unsigned int>* timestamps = nullptr;
         static inline std::mutex timestamps_mutex;
+        static inline Dictionary<sockaddr_in,
+                                 UniqPtr<unsigned char[]>,
+                                 unsigned int>* keys = nullptr;
+        static inline std::mutex keys_mutex;
     };
 
     inline static void HandleHandshakeRequest(
         UniqPtr<HandshakeRequest> request,
+        unsigned int request_size,
+        sockaddr_in client
+    );
+
+    inline static void HandleTransferData(
+        UniqPtr<TransferData> request,
+        unsigned int request_size,
         sockaddr_in client
     ) noexcept;
 
@@ -80,14 +98,18 @@ inline void Server::SavePeer(const unsigned char* const public_key) {
 
 inline void Server::Init() {
     /* Allocate the memory for dictionaries */
-    std::lock_guard peers_lock(Peers::peers_mutex);
-    Peers::peers = new Dictionary<unsigned int,
+    std::lock_guard peers_lock(Peers::details_mutex);
+    Peers::details = new Dictionary<unsigned int,
                                   Peers::Details,
                                   unsigned int>(Peers::number);
     std::lock_guard timestamps_lock(Peers::timestamps_mutex);
     Peers::timestamps = new Dictionary<KeyBuffer,
                                        unsigned long,
                                        unsigned int>(Peers::number);
+    std::lock_guard keys_lock(Peers::keys_mutex);
+    Peers::keys = new Dictionary<sockaddr_in,
+                                 UniqPtr<unsigned char[]>,
+                                 unsigned int>(Peers::number);
 
     /* Fill timestamps dictionary with zeros */
     std::lock_guard public_keys_lock(Peers::public_keys_mutex);
@@ -95,7 +117,12 @@ inline void Server::Init() {
         Peers::timestamps->Put(public_key, 0UL);
 
     /* Add server to the peers list */
-    Peers::peers->Put(local_ip.netb, {});
+    Peers::details->Put(local_ip.netb, {});
+}
+
+inline void Server::HandleTunPackage(const char* const buffer,
+                                     const int package_size,
+                                     const unsigned int destimation_netb) {
 }
 
 inline void Server::RunHandlePackagesLoop() {
@@ -116,29 +143,35 @@ inline void Server::RunHandlePackagesLoop() {
         if (raw_type > TRANSFER_DATA) return;
         const PackageType type = (PackageType)raw_type;
 
+#undef COPY_BUFFER_TO_HEAP_AND_HANDLE_IT
 #define COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(T)                                  \
         {                                                                     \
             T* request = new T(*(const T*)(const void*)buffer);               \
-            std::thread(&Handle##T, request, from).detach();                  \
+            std::thread(&Handle##T, request, buffer_size, from).detach();     \
+            continue;                                                         \
         }
 
         /* Handle the package by its type */
         if (type == HANDSHAKE_REQUEST)
             if (buffer_size == sizeof(HandshakeRequest))
                 COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(HandshakeRequest);
+        if (type == TRANSFER_DATA)
+                COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(TransferData);
     }
 }
 
 inline void Server::HandleHandshakeRequest(
     const UniqPtr<HandshakeRequest> request,
+    const unsigned int request_size,
     const sockaddr_in client
-) noexcept {
+) {
     INFO_LOG("Receive a handshake request from %s:%hu",
              inet_ntoa(client.sin_addr),
              ntohs(client.sin_port));
 
     /* Buffer for the chained key */
-    unsigned char chain_key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
+    UniqPtr<unsigned char[]> chain_key =
+        new unsigned char[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
 
     /* Decrypt the request payload */
     {
@@ -221,23 +254,23 @@ inline void Server::HandleHandshakeRequest(
     unsigned char response_netmask = request->payload.netmask;
 
     /* Handle the local ip address and netmask */
-    std::lock_guard peers_lock(Peers::peers_mutex);
+    std::lock_guard peers_lock(Peers::details_mutex);
     {
         /* Get the passed ip and the netmask */
         const unsigned int client_ip = response_ip;
         const unsigned char client_netmask = response_netmask;
 
         /* Try to delete the peer with such a static key (if exists) */
-        for (const auto& [local_ip, details] : *Peers::peers)
+        for (const auto& [local_ip, details] : *Peers::details)
             if (equal((KeyBuffer)details.static_public_key,
                       (KeyBuffer)request->payload.static_public_key))
-                Peers::peers->Delete(local_ip);
+                Peers::details->Delete(local_ip);
 
         /* If there already an ip address passed */
         if (client_ip != INADDR_ANY && client_netmask != 0) {
             /* If there is already an element with such a local ip,
              * reset the connection */
-            if (Peers::peers->Has(client_ip)) return;
+            if (Peers::details->Has(client_ip)) return;
         /* If the user decide to get ip by the server */
         } else {
             /* Set the server's netmask to the response */
@@ -251,7 +284,7 @@ inline void Server::HandleHandshakeRequest(
                 (unsigned int)(start + (rand() % (end - start + 1)));
             _rand_mutex.unlock();
             const unsigned int random_ip_netb = htonl(random_ip);
-            if (!Peers::peers->Has(random_ip_netb)) {
+            if (!Peers::details->Has(random_ip_netb)) {
                 response_ip = random_ip_netb;
                 goto the_end;
             }
@@ -259,14 +292,14 @@ inline void Server::HandleHandshakeRequest(
             /* Try to get the free ip */
             for (unsigned int ip = random_ip; ip < end; ++ip) {
                 const unsigned int ip_netb = htonl(ip);
-                if (!Peers::peers->Has(ip_netb)) {
+                if (!Peers::details->Has(ip_netb)) {
                     response_ip = ip_netb;
                     goto the_end;
                 }
             }
             for (unsigned int ip = random_ip; ip > start; --ip) {
                 const unsigned int ip_netb = htonl(ip);
-                if (!Peers::peers->Has(ip_netb)) {
+                if (!Peers::details->Has(ip_netb)) {
                     response_ip = ip_netb;
                     goto the_end;
                 }
@@ -311,7 +344,7 @@ inline void Server::HandleHandshakeRequest(
     memcpy(details.chain_key,
            chain_key,
            crypto_aead_chacha20poly1305_KEYBYTES);
-    Peers::peers->Put(response_ip, details);
+    Peers::details->Put(response_ip, details);
 
     /* Assemble the response */
     HandshakeResponse response(ephemeral_keys.Public(),
@@ -337,4 +370,52 @@ inline void Server::HandleHandshakeRequest(
     main_socket.Send((const char*)(const void*)&response,
                      sizeof(HandshakeResponse),
                      client);
+
+    /* Save the peer's chain key */
+    std::lock_guard keys_lock(Peers::keys_mutex);
+    Peers::keys->Put(client, std::move(chain_key));
+    chain_key.Release();
+}
+
+inline void Server::HandleTransferData(
+    const UniqPtr<TransferData> request,
+    const unsigned int request_size,
+    const sockaddr_in client
+) noexcept {
+    TRACE_LOG("Recieve a transfer data from the %s:%hu",
+              inet_ntoa(client.sin_addr),
+              ntohs(client.sin_port));
+
+    /* Try to decrypt the package */
+    unsigned long long buffer_size;
+    try {
+        std::lock_guard keys_lock(Peers::keys_mutex);
+        if (crypto_aead_chacha20poly1305_ietf_decrypt(
+            (unsigned char*)(void*)&request->payload,
+            &buffer_size,
+            nullptr,
+            (unsigned char*)(void*)&request->payload,
+            request_size - sizeof(request->header),
+            (unsigned char*)(void*)&request->header,
+            sizeof(request->header),
+            request->header.nonce,
+            Peers::keys->Get(client).Get()
+        ) != 0) {
+            WARN_LOG("Forged message found");
+            return;
+        }
+    } catch (const DictionaryError&) { return; }
+
+    /* Get the destination IP address */
+    const iphdr* const ip_header = (iphdr*)(void*)&request->payload;
+    const unsigned int destination_netb = ip_header->daddr;
+
+    /* If this package is our */
+    if (destination_netb == local_ip.netb)
+        tun->Write((char*)(void*)&request->payload,
+                   (unsigned int)buffer_size);
+    /* Else send it to the destination */
+    else {
+        /* TODO */
+    }
 }
