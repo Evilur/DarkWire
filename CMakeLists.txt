@@ -5,7 +5,10 @@ PROJECT(DarkWire)
 
 # Set compile options
 IF (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    SET(CMAKE_CXX_FLAGS "-g3 -O0 -fdiagnostics-color=always")
+    SET(CMAKE_CXX_FLAGS "-g3 -O0 \
+        -fdiagnostics-color=always \
+        -fsanitize=address \
+        -fno-omit-frame-pointer")
     SET(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 ELSE ()
     SET(CMAKE_CXX_FLAGS "-g0 -O2 -static")
