@@ -1,8 +1,9 @@
 #pragma once
 
-#include "type/string.h"
 #include "core/global.h"
+#include "core/config.h"
 #include "exception/tun_error.h"
+#include "type/string.h"
 #include "util/class.h"
 #include "util/logger.h"
 #include "util/system.h"
@@ -75,6 +76,9 @@ inline void TUN::Up() noexcept {
                                 inet_ntoa({ local_ip.netb }),
                                 netmask,
                                 _tun_name.CStr()));
+    System::Exec(String::Format("ip link set %s mtu %d",
+                                _tun_name.CStr(),
+                                Config::Interface::mtu));
     System::Exec(String::Format("ip link set %s up", _tun_name.CStr()));
     INFO_LOG("Interface [%s] is up", _tun_name.CStr());
     _is_up = true;
@@ -82,7 +86,8 @@ inline void TUN::Up() noexcept {
 
 inline bool TUN::IsUp() const noexcept { return _is_up; }
 
-inline int TUN::Read(char* const buffer, const unsigned int mtu) const noexcept {
+inline int TUN::Read(char* const buffer, const unsigned int mtu)
+const noexcept {
 #if LOG_LEVEL == 0
     const int result = (int)read(_tun_fd, buffer, mtu);
     if (result != -1)
