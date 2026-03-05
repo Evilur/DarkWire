@@ -17,7 +17,7 @@ public:
     PREVENT_INSTANTIATION(Path);
 
     /* Initialize the class */
-    static void Init();
+    inline static void Init();
 
 /* If we are compiling for Unix based */
 #if defined(__unix__) || defined(__unix) || defined(unix)
@@ -25,3 +25,8 @@ public:
     static inline const fs::path CONFIG_DIR = "/etc/darkwire";
 #endif
 };
+
+inline void Path::Init() {
+    /* Create all necessary directories */
+    fs::create_directories(CONFIG_DIR);
+}

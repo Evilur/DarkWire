@@ -1,6 +1,5 @@
 #pragma once
 
-#include "core/config.h"
 #include "core/global.h"
 #include "core/keys.h"
 #include "core/tun.h"
@@ -66,15 +65,15 @@ private:
     };
 
     inline static void HandleHandshakeRequest(
-        UniqPtr<HandshakeRequest> request,
-        unsigned int request_size,
-        sockaddr_in client
+        UniqPtr<HandshakeRequest> package,
+        unsigned int package_size,
+        sockaddr_in from
     );
 
     inline static void HandleTransferData(
-        UniqPtr<TransferData> request,
-        unsigned int request_size,
-        sockaddr_in client
+        UniqPtr<TransferData> package,
+        unsigned int package_size,
+        sockaddr_in from
     ) noexcept;
 
     static inline std::mutex _rand_mutex;
@@ -176,8 +175,8 @@ inline void Server::RunHandlePackagesLoop() {
 #undef COPY_BUFFER_TO_HEAP_AND_HANDLE_IT
 #define COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(T)                                  \
         {                                                                     \
-            T* request = new T(*(const T*)(const void*)buffer);               \
-            std::thread(&Handle##T, request, buffer_size, from).detach();     \
+            T* package = new T(*(const T*)(const void*)buffer);               \
+            std::thread(&Handle##T, package, buffer_size, from).detach();     \
             continue;                                                         \
         }
 
@@ -191,13 +190,13 @@ inline void Server::RunHandlePackagesLoop() {
 }
 
 inline void Server::HandleHandshakeRequest(
-    const UniqPtr<HandshakeRequest> request,
-    const unsigned int request_size,
-    const sockaddr_in client
+    const UniqPtr<HandshakeRequest> package,
+    const unsigned int package_size,
+    const sockaddr_in from
 ) {
     INFO_LOG("Receive a handshake request from %s:%hu",
-             inet_ntoa(client.sin_addr),
-             ntohs(client.sin_port));
+             inet_ntoa(from.sin_addr),
+             ntohs(from.sin_port));
 
     /* Buffer for the chained key */
     UniqPtr<unsigned char[]> chain_key =
@@ -209,7 +208,7 @@ inline void Server::HandleHandshakeRequest(
         unsigned char shared[crypto_scalarmult_BYTES];
         if (crypto_scalarmult(shared,
                               static_keys->Secret(),
-                              request->header.ephemeral_public_key) == -1) {
+                              package->header.ephemeral_public_key) == -1) {
             ERROR_LOG("crypto_scalarmult: "
                       "Failed to compute the shared secret");
             return;
@@ -221,14 +220,14 @@ inline void Server::HandleHandshakeRequest(
         /* Decrypt the message */
         unsigned long long dummy_len;
         if (crypto_aead_chacha20poly1305_ietf_decrypt(
-            (unsigned char*)(void*)&request->payload,
+            (unsigned char*)(void*)&package->payload,
             &dummy_len,
             nullptr,
-            (unsigned char*)(void*)&request->payload,
-            sizeof(request->payload) + sizeof(request->poly1305_tag),
-            (unsigned char*)(void*)&request->header,
-            sizeof(request->header),
-            request->header.nonce,
+            (unsigned char*)(void*)&package->payload,
+            sizeof(package->payload) + sizeof(package->poly1305_tag),
+            (unsigned char*)(void*)&package->header,
+            sizeof(package->header),
+            package->header.nonce,
             chain_key
         ) != 0) {
             WARN_LOG("Forged message found");
@@ -242,7 +241,7 @@ inline void Server::HandleHandshakeRequest(
         bool is_allowed = false;
         std::lock_guard public_keys_lock(Peers::public_keys_mutex);
         for (const unsigned char* public_key : *Peers::public_keys)
-            if (memcmp(request->payload.static_public_key,
+            if (memcmp(package->payload.static_public_key,
                        public_key,
                        crypto_scalarmult_BYTES) == 0)
                 is_allowed = true;
@@ -256,7 +255,7 @@ inline void Server::HandleHandshakeRequest(
     {
         /* Get the current time */
         unsigned long current_time = (unsigned long)std::time(nullptr);
-        unsigned long client_timestamp = request->payload.timestamp;
+        unsigned long client_timestamp = package->payload.timestamp;
 
         /* Get the delta time */
         unsigned long delta_time = current_time > client_timestamp
@@ -269,7 +268,7 @@ inline void Server::HandleHandshakeRequest(
         /* Get the last timestamp for such a key */
         Peers::timestamps_mutex.lock();
         unsigned long& last_timestamp =
-            Peers::timestamps->Get(request->payload.static_public_key);
+            Peers::timestamps->Get(package->payload.static_public_key);
         Peers::timestamps_mutex.unlock();
 
         /* Compare current timestamp with the last one */
@@ -280,8 +279,8 @@ inline void Server::HandleHandshakeRequest(
     }
 
     /* Variables for the response (default is data from the request) */
-    unsigned int response_ip = request->payload.ip;
-    unsigned char response_netmask = request->payload.netmask;
+    unsigned int response_ip = package->payload.ip;
+    unsigned char response_netmask = package->payload.netmask;
 
     /* Handle the local ip address and netmask */
     std::lock_guard details_lock(Peers::details_mutex);
@@ -293,7 +292,7 @@ inline void Server::HandleHandshakeRequest(
         /* Try to delete the peer with such a static key (if exists) */
         for (const auto& [local_ip, details] : *Peers::details)
             if (equal((KeyBuffer)details.static_public_key,
-                      (KeyBuffer)request->payload.static_public_key))
+                      (KeyBuffer)package->payload.static_public_key))
                 Peers::details->Delete(local_ip);
 
         /* If there already an ip address passed */
@@ -348,7 +347,7 @@ inline void Server::HandleHandshakeRequest(
     unsigned char shared[crypto_scalarmult_BYTES];
     if (crypto_scalarmult(shared,
                           ephemeral_keys.Secret(),
-                          request->header.ephemeral_public_key) == -1) {
+                          package->header.ephemeral_public_key) == -1) {
         ERROR_LOG("crypto_scalarmult: Failed to compute the shared secret");
         return;
     }
@@ -357,7 +356,7 @@ inline void Server::HandleHandshakeRequest(
     /* Compute the third shared secret and update the chain keys */
     if (crypto_scalarmult(shared,
                           ephemeral_keys.Secret(),
-                          request->payload.static_public_key) == -1) {
+                          package->payload.static_public_key) == -1) {
         ERROR_LOG("crypto_scalarmult: Failed to compute the shared secret");
         return;
     }
@@ -365,11 +364,11 @@ inline void Server::HandleHandshakeRequest(
 
     /* If all is OK, save the current peer */
     Peers::Details details {
-        .nonce = Nonce(request->header.nonce),
-        .endpoint = client
+        .nonce = Nonce(package->header.nonce),
+        .endpoint = from
     };
     memcpy(details.static_public_key,
-           request->payload.static_public_key,
+           package->payload.static_public_key,
            crypto_scalarmult_BYTES);
     memcpy(details.chain_key,
            chain_key,
@@ -399,37 +398,37 @@ inline void Server::HandleHandshakeRequest(
     /* Send the response */
     main_socket.Send((const char*)(const void*)&response,
                      sizeof(HandshakeResponse),
-                     client);
+                     from);
 
     /* Save the peer's chain key */
     std::lock_guard keys_lock(Peers::keys_mutex);
-    Peers::keys->Put(client, std::move(chain_key));
+    Peers::keys->Put(from, std::move(chain_key));
     chain_key.Release();
 }
 
 inline void Server::HandleTransferData(
-    const UniqPtr<TransferData> request,
-    const unsigned int request_size,
-    const sockaddr_in client
+    const UniqPtr<TransferData> package,
+    const unsigned int package_size,
+    const sockaddr_in from
 ) noexcept {
     TRACE_LOG("Recieve a transfer data from the %s:%hu",
-              inet_ntoa(client.sin_addr),
-              ntohs(client.sin_port));
+              inet_ntoa(from.sin_addr),
+              ntohs(from.sin_port));
 
     /* Try to decrypt the package */
     unsigned long long buffer_size;
     try {
         std::lock_guard keys_lock(Peers::keys_mutex);
         if (crypto_aead_chacha20poly1305_ietf_decrypt(
-            (unsigned char*)(void*)&request->payload,
+            (unsigned char*)(void*)&package->payload,
             &buffer_size,
             nullptr,
-            (unsigned char*)(void*)&request->payload,
-            request_size - sizeof(request->header),
-            (unsigned char*)(void*)&request->header,
-            sizeof(request->header),
-            request->header.nonce,
-            Peers::keys->Get(client).Get()
+            (unsigned char*)(void*)&package->payload,
+            package_size - sizeof(package->header),
+            (unsigned char*)(void*)&package->header,
+            sizeof(package->header),
+            package->header.nonce,
+            Peers::keys->Get(from).Get()
         ) != 0) {
             WARN_LOG("Forged message found");
             return;
@@ -437,12 +436,15 @@ inline void Server::HandleTransferData(
     } catch (const DictionaryError&) { return; }
 
     /* Get the destination IP address */
-    const iphdr* const ip_header = (iphdr*)(void*)request->payload.buffer;
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Waddress-of-packed-member"
+    const iphdr* const ip_header = (iphdr*)(void*)package->payload.buffer;
     const unsigned int destination_netb = ip_header->daddr;
+    #pragma GCC diagnostic pop
 
     /* If this package is our */
     if (destination_netb == local_ip.netb)
-        tun->Write(request->payload.buffer, (unsigned int)buffer_size);
+        tun->Write(package->payload.buffer, (unsigned int)buffer_size);
     /* Else send it to the destination */
     else {
         /* TODO */

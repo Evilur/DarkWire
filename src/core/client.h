@@ -56,7 +56,14 @@ private:
         (unsigned long)std::time(nullptr);
 
     inline static void HandleHandshakeResponse(
-        UniqPtr<HandshakeResponse> response,
+        UniqPtr<HandshakeResponse> package,
+        unsigned int package_size,
+        sockaddr_in from
+    ) noexcept;
+
+    inline static void HandleTransferData(
+        UniqPtr<TransferData> package,
+        unsigned int package_size,
         sockaddr_in from
     ) noexcept;
 
@@ -184,8 +191,9 @@ inline void Client::RunHandlePackagesLoop() {
 #undef COPY_BUFFER_TO_HEAP_AND_HANDLE_IT
 #define COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(T)                                  \
         {                                                                     \
-            T* request = new T(*(const T*)(const void*)buffer);               \
-            std::thread(&Handle##T, request, from).detach();                  \
+            T* package = new T(*(const T*)(const void*)buffer);               \
+            std::thread(&Handle##T, package, buffer_size, from).detach();     \
+            continue;                                                         \
         }
 
         /* Handle the package by its type */
@@ -193,6 +201,8 @@ inline void Client::RunHandlePackagesLoop() {
             if (buffer_size == sizeof(HandshakeResponse)
                 && equal(from, Server::endpoint))
                     COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(HandshakeResponse);
+        if (type == TRANSFER_DATA)
+            COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(TransferData);
     }
 }
 
@@ -260,14 +270,18 @@ inline void Client::HandleTunPackage(const char* const buffer,
 }
 
 inline void Client::HandleHandshakeResponse(
-    const UniqPtr<HandshakeResponse> response,
+    const UniqPtr<HandshakeResponse> package,
+    const unsigned int package_size,
     const sockaddr_in from
 ) noexcept {
+    /* If this package is not from the server */
+    if (!equal(from, Server::endpoint)) return;
+
     /* Compute the second shared secret and update the chain key */
     unsigned char shared[crypto_scalarmult_BYTES];
     if (crypto_scalarmult(shared,
                           Server::ephemeral_keys->Secret(),
-                          response->header.ephemeral_public_key) == -1) {
+                          package->header.ephemeral_public_key) == -1) {
         ERROR_LOG("crypto_scalarmult: "
                   "Failed to compute the shared secret");
         return;
@@ -277,7 +291,7 @@ inline void Client::HandleHandshakeResponse(
     /* Compute the third shared secret and update the chain key */
     if (crypto_scalarmult(shared,
                           static_keys->Secret(),
-                          response->header.ephemeral_public_key) == -1) {
+                          package->header.ephemeral_public_key) == -1) {
         ERROR_LOG("crypto_scalarmult: "
                   "Failed to compute the shared secret");
         return;
@@ -287,14 +301,14 @@ inline void Client::HandleHandshakeResponse(
     /* Decrypt the payload */
     unsigned long long dummy_len;
     if (crypto_aead_chacha20poly1305_ietf_decrypt(
-        (unsigned char*)(void*)&response->payload,
+        (unsigned char*)(void*)&package->payload,
         &dummy_len,
         nullptr,
-        (unsigned char*)(void*)&response->payload,
-        sizeof(response->payload) + sizeof(response->poly1305_tag),
-        (unsigned char*)(void*)&response->header,
-        sizeof(response->header),
-        response->header.nonce,
+        (unsigned char*)(void*)&package->payload,
+        sizeof(package->payload) + sizeof(package->poly1305_tag),
+        (unsigned char*)(void*)&package->header,
+        sizeof(package->header),
+        package->header.nonce,
         Server::chain_key
     ) != 0) {
         WARN_LOG("Forged message found");
@@ -304,8 +318,8 @@ inline void Client::HandleHandshakeResponse(
     /* If there is the first handshake */
     if (!tun->IsUp()) {
         /* Set the ip and the netmask */
-        local_ip.SetNetb(response->payload.local_ip);
-        netmask = response->payload.netmask;
+        local_ip.SetNetb(package->payload.local_ip);
+        netmask = package->payload.netmask;
 
         /* Calculate net-specific variables */
         calc_net();
@@ -315,7 +329,7 @@ inline void Client::HandleHandshakeResponse(
 
         /* Add the server to the peers list */
         std::lock_guard details_lock(Peers::details_mutex);
-        Peers::details->Put(response->payload.server_local_ip, {
+        Peers::details->Put(package->payload.server_local_ip, {
             .endpoint = Server::endpoint,
             .last_package_timestamp = ULONG_MAX,
             .key = Server::chain_key,
@@ -327,4 +341,12 @@ inline void Client::HandleHandshakeResponse(
     INFO_LOG("The handshake response has been successfully handled");
     _next_handshake_timestamp = (unsigned long)std::time(nullptr) + 180;
     Server::mutex.unlock();
+}
+
+inline void Client::HandleTransferData(
+    UniqPtr<TransferData> package,
+    unsigned int package_size,
+    sockaddr_in from
+) noexcept {
+
 }

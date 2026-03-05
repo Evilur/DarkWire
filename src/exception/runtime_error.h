@@ -2,6 +2,7 @@
 
 #include "util/class.h"
 
+#include <cstring>
 #include <exception>
 
 /**
@@ -21,3 +22,10 @@ public:
 private:
     char* _message = nullptr;
 };
+
+inline RuntimeError::~RuntimeError() noexcept { delete[] _message; }
+
+inline RuntimeError::RuntimeError(const char* const message) :
+    _message(new char[strlen(message) + 1]) { strcpy(_message, message); }
+
+inline const char* RuntimeError::what() const noexcept { return _message; }

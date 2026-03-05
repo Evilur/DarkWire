@@ -10,3 +10,6 @@ class KeysError final : public RuntimeError {
 public:
     explicit KeysError(const char* message);
 };
+
+inline KeysError::KeysError(const char* const message) :
+    RuntimeError(message) { }
