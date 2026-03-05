@@ -17,20 +17,20 @@ struct TransferData final {
 
     explicit TransferData(Nonce& nonce,
                           const char* buffer,
-                          unsigned int buffer_size) noexcept;
+                          int buffer_size) noexcept;
 
-    [[nodiscard]] unsigned int Size(unsigned int buffer_size) const noexcept;
+    [[nodiscard]] unsigned int Size(int buffer_size) const noexcept;
 } __attribute__((packed));
 
 inline TransferData::TransferData(Nonce& nonce,
                                   const char* const buffer,
-                                  const unsigned int buffer_size) noexcept {
+                                  const  int buffer_size) noexcept {
     header.type = TRANSFER_DATA;
     nonce.Copy(header.nonce);
     memcpy(payload.buffer, buffer, buffer_size);
 }
 
-inline unsigned int TransferData::Size(const unsigned int buffer_size)
+inline unsigned int TransferData::Size(const int buffer_size)
 const noexcept {
     return sizeof(header) +
            buffer_size +

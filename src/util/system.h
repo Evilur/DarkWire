@@ -2,6 +2,10 @@
 
 #include "util/class.h"
 
+#include <cstdio>
+#include <cstdlib>
+#include <unistd.h>
+
 /**
  * Static class for executing system commands
  * @author Evilur <the.evilur@gmail.com>
@@ -12,3 +16,8 @@ public:
 
     static void Exec(const char* command);
 };
+
+inline void System::Exec(const char* const command) {
+    printf("\033[0m[#] %s\n", command);
+    system(command);
+}

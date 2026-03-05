@@ -97,6 +97,6 @@ inline int TUN::Read(char* const buffer, const unsigned int mtu) const noexcept 
 
 inline void TUN::Write(const char* const buffer,
                        const unsigned int buffer_size) noexcept {
-    TRACE_LOG("Sending %u bytes to the TUN", buffer_size);
+    TRACE_LOG("Writing %u bytes to the TUN", buffer_size);
     write(_tun_fd, buffer, buffer_size);
 }

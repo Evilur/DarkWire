@@ -39,7 +39,7 @@ public:
     inline static void RunKeepAliveLoop() noexcept;
 
     inline static void HandleTunPackage(const char* buffer,
-                                        unsigned int buffer_size,
+                                        int buffer_size,
                                         unsigned int destination_netb);
 
 private:
@@ -70,8 +70,8 @@ private:
 
         static inline Dictionary<unsigned int,
                                  Details,
-                                 unsigned int>* peers = nullptr;
-        static inline std::mutex mutex;
+                                 unsigned int>* details = nullptr;
+        static inline std::mutex details_mutex;
     };
 
 };
@@ -94,8 +94,8 @@ inline void Client::Init() {
                       sodium_base64_VARIANT_ORIGINAL);
 
     /* Allocate memory for peers */
-    std::lock_guard peers_lock(Peers::mutex);
-    Peers::peers = new Dictionary<unsigned int,
+    std::lock_guard details_lock(Peers::details_mutex);
+    Peers::details = new Dictionary<unsigned int,
                                   Peers::Details,
                                   unsigned int>(8);
 }
@@ -165,7 +165,7 @@ inline void Client::RunHandshakeLoop() {
 
 inline void Client::RunHandlePackagesLoop() {
     /* Allocate the memory for the buffer */
-    char* buffer = new char[(unsigned int)Config::Interface::mtu];
+    char* buffer = new char[1501];
 
     /* Start receiving packages */
     for (;;) {
@@ -210,15 +210,15 @@ inline void Client::RunKeepAliveLoop() noexcept {
 }
 
 inline void Client::HandleTunPackage(const char* const buffer,
-                                     const unsigned int buffer_size,
+                                     const int buffer_size,
                                      const unsigned int destination_netb) {
     /* Try to get the details from the peers list */
     sockaddr_in endpoint;
     const unsigned char* key;
     Nonce* nonce;
     try {
-        std::lock_guard peers_lock(Peers::mutex);
-        Peers::Details& details = Peers::peers->Get(destination_netb);
+        std::lock_guard details_lock(Peers::details_mutex);
+        Peers::Details& details = Peers::details->Get(destination_netb);
         endpoint = details.endpoint;
         key = details.key;
         nonce = &details.nonce;
@@ -238,7 +238,6 @@ inline void Client::HandleTunPackage(const char* const buffer,
 
     /* Assemble the transfer data package */
     TransferData package(*nonce, buffer, buffer_size);
-    const unsigned int package_size = package.Size(buffer_size);
 
     /* Encrypt the package */
     unsigned long long dummy_len;
@@ -246,7 +245,7 @@ inline void Client::HandleTunPackage(const char* const buffer,
         (unsigned char*)(void*)&package.payload,
         &dummy_len,
         (unsigned char*)(void*)&package.payload,
-        buffer_size,
+        (unsigned long long)buffer_size,
         (unsigned char*)(void*)&package.header,
         sizeof(package.header),
         nullptr,
@@ -256,7 +255,7 @@ inline void Client::HandleTunPackage(const char* const buffer,
 
     /* Send the encrypted message */
     main_socket.Send((char*)(void*)&package,
-                     package_size,
+                     sizeof(package.header) + dummy_len,
                      endpoint);
 }
 
@@ -315,8 +314,8 @@ inline void Client::HandleHandshakeResponse(
         up_interface();
 
         /* Add the server to the peers list */
-        std::lock_guard peers_lock(Peers::mutex);
-        Peers::peers->Put(response->payload.server_local_ip, {
+        std::lock_guard details_lock(Peers::details_mutex);
+        Peers::details->Put(response->payload.server_local_ip, {
             .endpoint = Server::endpoint,
             .last_package_timestamp = ULONG_MAX,
             .key = Server::chain_key,

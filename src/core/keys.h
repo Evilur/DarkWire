@@ -1,8 +1,11 @@
 #pragma once
 
 #include "util/class.h"
+#include "exception/keys_error.h"
 
+#include <cstring>
 #include <sodium.h>
+
 
 /**
  * Storage for the secret and public keys
@@ -26,3 +29,26 @@ private:
     unsigned char _sk[crypto_scalarmult_SCALARBYTES];
     unsigned char _pk[crypto_scalarmult_BYTES];
 };
+
+inline Keys::Keys() noexcept {
+    /* Generate the random secret key */
+    randombytes_buf(_sk, crypto_scalarmult_BYTES);
+
+    /* Generate the public key and do a key clamping */
+    crypto_scalarmult_base(_pk, _sk);
+}
+
+inline Keys::Keys(const char* const base64_secret_key) noexcept {
+    /* Decode the base64 */
+    sodium_base642bin(_sk, crypto_scalarmult_BYTES,
+                      base64_secret_key, strlen(base64_secret_key),
+                      nullptr, nullptr, nullptr,
+                      sodium_base64_VARIANT_ORIGINAL);
+
+    /* Generate the public key and do a key clamping */
+    crypto_scalarmult_base(_pk, _sk);
+}
+
+inline const unsigned char* Keys::Secret() const noexcept { return _sk; }
+
+const unsigned char* Keys::Public() const noexcept { return _pk; }

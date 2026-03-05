@@ -260,7 +260,7 @@ static inline int handle_config(const char* const name) {
 
         /* Save the parameter value to the heap */
         while (*parameter_value_ptr == ' ') ++parameter_value_ptr;
-        char* parameter_value = new char[strlen(parameter_value_ptr)];
+        char* parameter_value = new char[strlen(parameter_value_ptr) + 1];
         strcpy(parameter_value, parameter_value_ptr);
 
         /* Save the parameter */
@@ -363,8 +363,7 @@ static inline int run_client() {
         const iphdr* const ip_header = (const iphdr*)(const void*)buffer;
 
         /* Get the destination ip */
-        NetAddr destinastion;
-        destinastion.SetNetb(ip_header->daddr);
+        NetAddr destinastion; destinastion.SetNetb(ip_header->daddr);
 
         /* Drop multicasts */
         if (destinastion.hostb >= 0xe0000000 &&
@@ -402,8 +401,7 @@ static inline int run_server() {
         const iphdr* const ip_header = (const iphdr*)(const void*)buffer;
 
         /* Get the destination ip */
-        NetAddr destinastion;
-        destinastion.SetNetb(ip_header->daddr);
+        NetAddr destinastion; destinastion.SetNetb(ip_header->daddr);
 
         /* Drop multicasts */
         if (destinastion.hostb >= 0xe0000000 &&

@@ -36,8 +36,8 @@ public:
     inline static void RunHandlePackagesLoop();
 
     inline static void HandleTunPackage(const char* buffer,
-                                        int package_size,
-                                        unsigned int destimation_netb);
+                                        int buffer_size,
+                                        unsigned int destination_netb);
 
 private:
     struct Peers {
@@ -98,7 +98,7 @@ inline void Server::SavePeer(const unsigned char* const public_key) {
 
 inline void Server::Init() {
     /* Allocate the memory for dictionaries */
-    std::lock_guard peers_lock(Peers::details_mutex);
+    std::lock_guard details_lock(Peers::details_mutex);
     Peers::details = new Dictionary<unsigned int,
                                   Peers::Details,
                                   unsigned int>(Peers::number);
@@ -121,13 +121,43 @@ inline void Server::Init() {
 }
 
 inline void Server::HandleTunPackage(const char* const buffer,
-                                     const int package_size,
-                                     const unsigned int destimation_netb) {
+                                     const int buffer_size,
+                                     const unsigned int destination_netb) {
+    /* Try to send the package to the peer with such an ip address */
+    try {
+        std::lock_guard details_lock(Peers::details_mutex);
+        std::lock_guard keys_lock(Peers::keys_mutex);
+        Peers::Details& details =
+            Peers::details->Get(destination_netb);
+        const unsigned char* const key = Peers::keys->Get(details.endpoint);
+
+        /* Create the response */
+        TransferData package(details.nonce, buffer, buffer_size);
+
+        /* Encrypt the package */
+        unsigned long long dummy_len;
+        crypto_aead_chacha20poly1305_ietf_encrypt(
+            (unsigned char*)(void*)&package.payload,
+            &dummy_len,
+            (unsigned char*)(void*)&package.payload,
+            (unsigned long long)buffer_size,
+            (unsigned char*)(void*)&package.header,
+            sizeof(package.header),
+            nullptr,
+            package.header.nonce,
+            key
+        );
+
+        /* Send the encrypted message */
+        main_socket.Send((char*)(void*)&package,
+                         sizeof(package.header) + dummy_len,
+                         details.endpoint);
+    } catch (const DictionaryError&) { return; }
 }
 
 inline void Server::RunHandlePackagesLoop() {
     /* Allocate the memory for the buffer */
-    char* buffer = new char[(unsigned int)Config::Interface::mtu];
+    char* buffer = new char[1501];
 
     /* Start receiving packages */
     for (;;) {
@@ -254,7 +284,7 @@ inline void Server::HandleHandshakeRequest(
     unsigned char response_netmask = request->payload.netmask;
 
     /* Handle the local ip address and netmask */
-    std::lock_guard peers_lock(Peers::details_mutex);
+    std::lock_guard details_lock(Peers::details_mutex);
     {
         /* Get the passed ip and the netmask */
         const unsigned int client_ip = response_ip;
@@ -407,13 +437,12 @@ inline void Server::HandleTransferData(
     } catch (const DictionaryError&) { return; }
 
     /* Get the destination IP address */
-    const iphdr* const ip_header = (iphdr*)(void*)&request->payload;
+    const iphdr* const ip_header = (iphdr*)(void*)request->payload.buffer;
     const unsigned int destination_netb = ip_header->daddr;
 
     /* If this package is our */
     if (destination_netb == local_ip.netb)
-        tun->Write((char*)(void*)&request->payload,
-                   (unsigned int)buffer_size);
+        tun->Write(request->payload.buffer, (unsigned int)buffer_size);
     /* Else send it to the destination */
     else {
         /* TODO */
