@@ -442,7 +442,7 @@ inline void Server::HandleTransferData(
     const unsigned int destination_netb = ip_header->daddr;
     #pragma GCC diagnostic pop
 
-    /* If this package is our */
+    /* If this package is the server */
     if (destination_netb == local_ip.netb)
         tun->Write(package->payload.buffer, (unsigned int)buffer_size);
     /* Else send it to the destination */
