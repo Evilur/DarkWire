@@ -10,12 +10,14 @@ struct TransferData final {
     struct {
         PackageType type;
         unsigned char nonce[crypto_aead_chacha20poly1305_ietf_NPUBBYTES];
+        unsigned int destination_ip;
     } __attribute__((packed)) header;
     struct {
-        char buffer[1472 + crypto_aead_chacha20poly1305_ietf_ABYTES];
+        char buffer[1500 - sizeof(header)];
     } __attribute__((packed)) payload;
 
     explicit TransferData(Nonce& nonce,
+                          unsigned int destination,
                           const char* buffer,
                           int buffer_size) noexcept;
 
@@ -23,11 +25,13 @@ struct TransferData final {
 } __attribute__((packed));
 
 inline TransferData::TransferData(Nonce& nonce,
+                                  const unsigned int destination,
                                   const char* const buffer,
                                   const  int buffer_size) noexcept {
     header.type = TRANSFER_DATA;
     nonce.Copy(header.nonce);
-    memcpy(payload.buffer, buffer, buffer_size);
+    header.destination_ip = destination;
+    memcpy(payload.buffer, buffer, (unsigned long)buffer_size);
 }
 
 inline unsigned int TransferData::Size(const int buffer_size)

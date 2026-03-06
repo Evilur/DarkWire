@@ -17,7 +17,7 @@ public:
         static inline String pre_down = "";
         static inline String post_down = "";
         static inline short listen = 0;
-        static inline int mtu = 1472;
+        static inline int mtu = 1467;
     };
 
     struct Server final {

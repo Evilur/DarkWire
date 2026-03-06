@@ -131,13 +131,16 @@ inline void Server::HandleTunPackage(const char* const buffer,
         const unsigned char* const key = Peers::keys->Get(details.endpoint);
 
         /* Create the response */
-        TransferData package(details.nonce, buffer, buffer_size);
+        TransferData package(details.nonce,
+                             destination_netb,
+                             buffer,
+                             buffer_size);
 
         /* Encrypt the package */
-        unsigned long long dummy_len;
+        unsigned long long payload_size;
         crypto_aead_chacha20poly1305_ietf_encrypt(
             (unsigned char*)(void*)&package.payload,
-            &dummy_len,
+            &payload_size,
             (unsigned char*)(void*)&package.payload,
             (unsigned long long)buffer_size,
             (unsigned char*)(void*)&package.header,
@@ -149,14 +152,14 @@ inline void Server::HandleTunPackage(const char* const buffer,
 
         /* Send the encrypted message */
         main_socket.Send((char*)(void*)&package,
-                         sizeof(package.header) + dummy_len,
+                         sizeof(package.header) + payload_size,
                          details.endpoint);
     } catch (const DictionaryError&) { return; }
 }
 
 inline void Server::RunHandlePackagesLoop() {
     /* Allocate the memory for the buffer */
-    char* buffer = new char[1501];
+    char* buffer = new char[1500];
 
     /* Start receiving packages */
     for (;;) {

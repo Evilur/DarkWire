@@ -297,8 +297,8 @@ static inline int handle_config(const char* const name) {
     }
 
     /* Check the MTU */
-    if (Config::Interface::mtu > 1472) {
-        FATAL_LOG("MTU can not be more than 1472");
+    if (Config::Interface::mtu > 1467) {
+        FATAL_LOG("MTU can not be more than 1467");
         return -1;
     }
 

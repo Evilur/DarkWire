@@ -180,7 +180,7 @@ inline void Client::RunHandshakeLoop() {
 
 inline void Client::RunHandlePackagesLoop() {
     /* Allocate the memory for the buffer */
-    char* buffer = new char[1501];
+    char* buffer = new char[1500];
 
     /* Start receiving packages */
     for (;;) {
@@ -255,13 +255,16 @@ inline void Client::HandleTunPackage(const char* const buffer,
               ntohs(endpoint.sin_port));
 
     /* Assemble the transfer data package */
-    TransferData package(*nonce, buffer, buffer_size);
+    TransferData package(*nonce,
+                         endpoint.sin_addr.s_addr,
+                         buffer,
+                         buffer_size);
 
     /* Encrypt the package */
-    unsigned long long dummy_len;
+    unsigned long long payload_size;
     crypto_aead_chacha20poly1305_ietf_encrypt(
         (unsigned char*)(void*)&package.payload,
-        &dummy_len,
+        &payload_size,
         (unsigned char*)(void*)&package.payload,
         (unsigned long long)buffer_size,
         (unsigned char*)(void*)&package.header,
@@ -273,7 +276,7 @@ inline void Client::HandleTunPackage(const char* const buffer,
 
     /* Send the encrypted message */
     main_socket.Send((char*)(void*)&package,
-                     sizeof(package.header) + dummy_len,
+                     sizeof(package.header) + payload_size,
                      endpoint);
 }
 
