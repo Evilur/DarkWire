@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/global.h"
+#include "main.h"
 #include "core/config.h"
 #include "exception/tun_error.h"
 #include "type/string.h"

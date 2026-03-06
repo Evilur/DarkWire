@@ -1,7 +1,7 @@
 #pragma once
 
+#include "main.h"
 #include "core/config.h"
-#include "core/global.h"
 #include "core/keys.h"
 #include "core/tun.h"
 #include "package/handshake_request.h"

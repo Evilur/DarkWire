@@ -1,9 +1,8 @@
+#include "main.h"
 #include "core/client.h"
 #include "core/config.h"
-#include "core/global.h"
 #include "core/keys.h"
 #include "core/server.h"
-#include "main.h"
 #include "socket/udp_socket.h"
 #include "type/string.h"
 #include "util/logger.h"
@@ -416,4 +415,23 @@ static inline int run_server() {
     }
 
     return -1;
+}
+
+void up_interface() {
+    /* Exec the PreUp command */
+    const char* const pre_up = Config::Interface::pre_up;
+    if (*pre_up != '\0') System::Exec(pre_up);
+
+    /* Up the interface */
+    tun->Up();
+
+    /* Exec the PostUp command */
+    const char* const post_up = Config::Interface::post_up;
+    if (*post_up != '\0') System::Exec(post_up);
+}
+
+inline void calc_net() {
+    binmask.SetHostb((netmask == 0) ? 0x0U : (~0U << (32U - netmask)));
+    network_prefix.SetHostb(local_ip.hostb & binmask.hostb);
+    broadcast.SetHostb(network_prefix.hostb | ~binmask.hostb);
 }

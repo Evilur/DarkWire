@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/global.h"
+#include "main.h"
 #include "package_type.h"
 #include "util/nonce.h"
 

@@ -1,7 +1,7 @@
 #pragma once
 
+#include "main.h"
 #include "package_type.h"
-#include "core/global.h"
 #include "util/nonce.h"
 
 #include <arpa/inet.h>

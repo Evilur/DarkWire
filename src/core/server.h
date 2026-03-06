@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/global.h"
+#include "main.h"
 #include "core/keys.h"
 #include "core/tun.h"
 #include "package/handshake_request.h"

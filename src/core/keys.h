@@ -1,11 +1,9 @@
 #pragma once
 
 #include "util/class.h"
-#include "exception/keys_error.h"
 
 #include <cstring>
 #include <sodium.h>
-
 
 /**
  * Storage for the secret and public keys
@@ -51,4 +49,4 @@ inline Keys::Keys(const char* const base64_secret_key) noexcept {
 
 inline const unsigned char* Keys::Secret() const noexcept { return _sk; }
 
-const unsigned char* Keys::Public() const noexcept { return _pk; }
+inline const unsigned char* Keys::Public() const noexcept { return _pk; }
