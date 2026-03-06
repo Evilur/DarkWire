@@ -418,6 +418,15 @@ inline void Server::HandleTransferData(
               inet_ntoa(from.sin_addr),
               ntohs(from.sin_port));
 
+    /* Get the destination IP address */
+    const unsigned int destination_netb = package->header.destination_ip;
+
+    /* If the pacakge isn't for the server, send it to the peer */
+    if (destination_netb != local_ip.netb) {
+        /* TODO */
+        return;
+    }
+
     /* Try to decrypt the package */
     unsigned long long buffer_size;
     try {
@@ -438,18 +447,6 @@ inline void Server::HandleTransferData(
         }
     } catch (const DictionaryError&) { return; }
 
-    /* Get the destination IP address */
-    #pragma GCC diagnostic push
-    #pragma GCC diagnostic ignored "-Waddress-of-packed-member"
-    const iphdr* const ip_header = (iphdr*)(void*)package->payload.buffer;
-    const unsigned int destination_netb = ip_header->daddr;
-    #pragma GCC diagnostic pop
-
-    /* If this package is the server */
-    if (destination_netb == local_ip.netb)
-        tun->Write(package->payload.buffer, (unsigned int)buffer_size);
-    /* Else send it to the destination */
-    else {
-        /* TODO */
-    }
+    /* Write the decrypted package to the TUN */
+    tun->Write(package->payload.buffer, (unsigned int)buffer_size);
 }

@@ -17,7 +17,7 @@ struct TransferData final {
     } __attribute__((packed)) payload;
 
     explicit TransferData(Nonce& nonce,
-                          unsigned int destination,
+                          unsigned int destination_ip,
                           const char* buffer,
                           int buffer_size) noexcept;
 
@@ -25,12 +25,12 @@ struct TransferData final {
 } __attribute__((packed));
 
 inline TransferData::TransferData(Nonce& nonce,
-                                  const unsigned int destination,
+                                  const unsigned int destination_ip,
                                   const char* const buffer,
                                   const  int buffer_size) noexcept {
     header.type = TRANSFER_DATA;
     nonce.Copy(header.nonce);
-    header.destination_ip = destination;
+    header.destination_ip = destination_ip;
     memcpy(payload.buffer, buffer, (unsigned long)buffer_size);
 }
 

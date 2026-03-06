@@ -256,7 +256,7 @@ inline void Client::HandleTunPackage(const char* const buffer,
 
     /* Assemble the transfer data package */
     TransferData package(*nonce,
-                         endpoint.sin_addr.s_addr,
+                         ((iphdr*)(void*)buffer)->daddr,
                          buffer,
                          buffer_size);
 
