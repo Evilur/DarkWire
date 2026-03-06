@@ -343,7 +343,7 @@ inline void Client::HandleHandshakeResponse(
         calc_net();
 
         /* Up the interface */
-        up_interface();
+        tun->Up();
 
         /* Add the server to the peers list */
         {

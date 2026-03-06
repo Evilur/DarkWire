@@ -44,6 +44,4 @@ static inline void run_handle_packages_loop(
     void (*handle_package)(const char* const, const int, const sockaddr_in&)
 );
 
-void up_interface();
-
 void calc_net();

@@ -72,6 +72,10 @@ inline TUN::TUN(const char* const name) : _tun_name(name),
 inline TUN::~TUN() noexcept { close(_tun_fd); }
 
 inline void TUN::Up() noexcept {
+    /* Exec pre up commands */
+    for (const String& command : Config::Interface::pre_up)
+        System::Exec(command);
+
     System::Exec(String::Format("ip addr add %s/%hhu dev %s",
                                 inet_ntoa({ local_ip.netb }),
                                 netmask,
@@ -82,6 +86,10 @@ inline void TUN::Up() noexcept {
     System::Exec(String::Format("ip link set %s up", _tun_name.CStr()));
     INFO_LOG("Interface [%s] is up", _tun_name.CStr());
     _is_up = true;
+
+    /* Exec post up commands */
+    for (const String& command : Config::Interface::post_up)
+        System::Exec(command);
 }
 
 inline bool TUN::IsUp() const noexcept { return _is_up; }

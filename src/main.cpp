@@ -270,13 +270,13 @@ static inline int handle_config(const char* const name) {
             else if (strcmp(parameter_key, "Address") == 0)
                 Config::Interface::address = parameter_value;
             else if (strcmp(parameter_key, "PreUp") == 0)
-                Config::Interface::pre_up = parameter_value;
+                Config::Interface::pre_up.Push(parameter_value);
             else if (strcmp(parameter_key, "PostUp") == 0)
-                Config::Interface::post_up = parameter_value;
+                Config::Interface::post_up.Push(parameter_value);
             else if (strcmp(parameter_key, "PreDown") == 0)
-                Config::Interface::pre_down = parameter_value;
+                Config::Interface::pre_down.Push(parameter_value);
             else if (strcmp(parameter_key, "PostDown") == 0)
-                Config::Interface::post_down = parameter_value;
+                Config::Interface::post_down.Push(parameter_value);
             else if (strcmp(parameter_key, "Listen") == 0)
                 Config::Interface::listen =
                     String::ToInt<short>(parameter_value);
@@ -383,7 +383,7 @@ static inline int run_client() {
 
 static inline int run_server() {
     /* Up the interface */
-    up_interface();
+    tun->Up();
 
     /* Init the server */
     Server::Init();
@@ -417,19 +417,6 @@ static inline int run_server() {
     }
 
     return -1;
-}
-
-void up_interface() {
-    /* Exec the PreUp command */
-    const char* const pre_up = Config::Interface::pre_up;
-    if (*pre_up != '\0') System::Exec(pre_up);
-
-    /* Up the interface */
-    tun->Up();
-
-    /* Exec the PostUp command */
-    const char* const post_up = Config::Interface::post_up;
-    if (*post_up != '\0') System::Exec(post_up);
 }
 
 inline void calc_net() {
