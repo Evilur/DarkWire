@@ -1,6 +1,7 @@
 #pragma once
 
 #include "package_type.h"
+#include "socket/udp_socket.h"
 #include "util/nonce.h"
 
 #include <cstring>
@@ -13,7 +14,7 @@ struct TransferData final {
         unsigned int destination_ip;
     } __attribute__((packed)) header;
     struct {
-        char buffer[1500 - sizeof(header)];
+        char buffer[UDPSocket::MTU - sizeof(header)];
     } __attribute__((packed)) payload;
 
     explicit TransferData(Nonce& nonce,

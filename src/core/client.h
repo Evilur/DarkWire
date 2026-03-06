@@ -8,6 +8,7 @@
 #include "package/handshake_response.h"
 #include "package/keep_alive.h"
 #include "package/transfer_data.h"
+#include "socket/udp_socket.h"
 #include "type/dictionary.h"
 #include "type/uniq_ptr.h"
 #include "util/class.h"
@@ -88,6 +89,12 @@ private:
 };
 
 inline void Client::Init() {
+    /* Increase send and receive buffers */
+    constexpr int RCVBUF = 32 * 1024 * 1024;
+    constexpr int SNDBUF = 32 * 1024 * 1024;
+    main_socket.SetOption(SO_RCVBUF, &RCVBUF, sizeof(RCVBUF));
+    main_socket.SetOption(SO_SNDBUF, &SNDBUF, sizeof(SNDBUF));
+
     /* Get the address */
     Server::endpoint = UDPSocket::GetAddress(Config::Server::endpoint);
 
@@ -180,7 +187,7 @@ inline void Client::RunHandshakeLoop() {
 
 inline void Client::RunHandlePackagesLoop() {
     /* Allocate the memory for the buffer */
-    char* buffer = new char[1500];
+    char buffer[UDPSocket::MTU];
 
     /* Start receiving packages */
     for (;;) {

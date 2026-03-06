@@ -7,6 +7,7 @@
 #include "package/handshake_response.h"
 #include "package/package_type.h"
 #include "package/transfer_data.h"
+#include "socket/udp_socket.h"
 #include "type/dictionary.h"
 #include "type/linked_list.h"
 #include "type/uniq_ptr.h"
@@ -96,6 +97,12 @@ inline void Server::SavePeer(const unsigned char* const public_key) {
 }
 
 inline void Server::Init() {
+    /* Increase send and receive buffers */
+    const int rcvbuf = 32 * 1024 * 1024 * (int)Peers::number;
+    const int sndbuf = 32 * 1024 * 1024 * (int)Peers::number;
+    main_socket.SetOption(SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
+    main_socket.SetOption(SO_SNDBUF, &sndbuf, sizeof(sndbuf));
+
     /* Allocate the memory for dictionaries */
     std::lock_guard details_lock(Peers::details_mutex);
     Peers::details = new Dictionary<unsigned int,
@@ -159,7 +166,7 @@ inline void Server::HandleTunPackage(const char* const buffer,
 
 inline void Server::RunHandlePackagesLoop() {
     /* Allocate the memory for the buffer */
-    char* buffer = new char[1500];
+    char buffer[UDPSocket::MTU];
 
     /* Start receiving packages */
     for (;;) {
