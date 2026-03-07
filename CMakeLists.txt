@@ -11,7 +11,7 @@ IF (CMAKE_BUILD_TYPE STREQUAL "Debug")
         -fno-omit-frame-pointer")
     SET(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 ELSE ()
-    SET(CMAKE_CXX_FLAGS "-g0 -O2 -static")
+    SET(CMAKE_CXX_FLAGS "-g0 -O2 -march=native -flto")
 ENDIF ()
 
 # Search header files in the 'src' directory
