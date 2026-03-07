@@ -13,12 +13,14 @@ Address = 10.0.0.25/24
 
 # Local port to listen responses from the server and from other peers
 # Default: 58094
+# *Not necessary
 Listen = 58094
 
 # Maximum transmission unit
 # This value can't be more than 1467
-# Default: 1467
-MTU = 1467
+# Default: 1420
+# *Not necessary
+MTU = 1420
 
 # Scripts to run before/after the interface is up/down
 # *Not necessary

@@ -15,8 +15,9 @@ Listen = 58094
 
 # Maximum transmission unit
 # This value can't be more than 1467
-# Default: 1467
-MTU = 1467
+# Default: 1420
+# *Not necessary
+MTU = 1420
 
 # Scripts to run before/after the interface is up/down
 # *Not necessary
