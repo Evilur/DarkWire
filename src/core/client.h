@@ -18,9 +18,9 @@
 
 #include <cstring>
 #include <ctime>
+#include <mutex>
 #include <netinet/in.h>
 #include <sodium.h>
-#include <thread>
 #include <unistd.h>
 
 /**
@@ -47,6 +47,7 @@ private:
     struct Server {
         static inline Nonce nonce;
         static inline sockaddr_in endpoint;
+        static inline unsigned int local_ip_netb;
         static inline unsigned char* public_key = nullptr;
         static inline unsigned char* chain_key = nullptr;
         static inline UniqPtr<Keys> ephemeral_keys = nullptr;
@@ -207,7 +208,7 @@ inline void Client::RunHandlePackagesLoop() {
 #define COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(T)                                  \
         {                                                                     \
             T* package = new T(*(const T*)(const void*)buffer);               \
-            std::thread(&Handle##T, package, buffer_size, from).detach();     \
+            Handle##T(package, buffer_size, from);                            \
             continue;                                                         \
         }
 
@@ -236,7 +237,7 @@ inline void Client::RunKeepAliveLoop() noexcept {
 
 inline void Client::HandleTunPackage(const char* const buffer,
                                      const int buffer_size,
-                                     const unsigned int destination_netb) {
+                                     unsigned int destination_netb) {
     /* Try to get the details from the peers list */
     sockaddr_in endpoint;
     const unsigned char* key;
@@ -252,6 +253,7 @@ inline void Client::HandleTunPackage(const char* const buffer,
         endpoint = Server::endpoint;
         key = Server::chain_key;
         nonce = &Server::nonce;
+        destination_netb = Server::local_ip_netb;
 
         /* TODO */
         /* Get the peer from the server */
@@ -262,10 +264,7 @@ inline void Client::HandleTunPackage(const char* const buffer,
               ntohs(endpoint.sin_port));
 
     /* Assemble the transfer data package */
-    TransferData package(*nonce,
-                         ((iphdr*)(void*)buffer)->daddr,
-                         buffer,
-                         buffer_size);
+    TransferData package(*nonce, destination_netb, buffer, buffer_size);
 
     /* Encrypt the package */
     unsigned long long payload_size;
@@ -344,19 +343,24 @@ inline void Client::HandleHandshakeResponse(
 
         /* Up the interface */
         tun->Up();
+    }
 
-        /* Add the server to the peers list */
-        {
-            std::lock_guard details_lock(Peers::details_mutex);
-            Peers::details->Put(package->payload.server_local_ip, {
-                .endpoint = Server::endpoint,
-                .last_package_timestamp = ULONG_MAX,
-                .key = Server::chain_key,
-                .nonce = Server::nonce
-            });
-        }
+    /* Save the server's local ip */
+    Server::local_ip_netb = package->payload.server_local_ip;
 
-        /* Put the server's key to the keys dictionary */
+    /* Add the server to the peers list */
+    {
+        std::lock_guard details_lock(Peers::details_mutex);
+        Peers::details->Put(package->payload.server_local_ip, {
+            .endpoint = Server::endpoint,
+            .last_package_timestamp = ULONG_MAX,
+            .key = Server::chain_key,
+            .nonce = Server::nonce
+        });
+    }
+
+    /* Put the server's key to the keys dictionary */
+    {
         std::lock_guard keys_lock(Peers::keys_mutex);
         Peers::keys->Put(Server::endpoint, Server::chain_key);
     }
@@ -372,7 +376,7 @@ inline void Client::HandleTransferData(
     unsigned int package_size,
     sockaddr_in from
 ) noexcept {
-    TRACE_LOG("Recieve a transfer data from the %s:%hu",
+    TRACE_LOG("Receive a transfer data from the %s:%hu",
               inet_ntoa(from.sin_addr),
               ntohs(from.sin_port));
 

@@ -19,7 +19,6 @@
 #include <mutex>
 #include <netinet/in.h>
 #include <netinet/ip.h>
-#include <thread>
 
 /**
  * Static class for server only methods
@@ -186,7 +185,7 @@ inline void Server::RunHandlePackagesLoop() {
 #define COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(T)                                  \
         {                                                                     \
             T* package = new T(*(const T*)(const void*)buffer);               \
-            std::thread(&Handle##T, package, buffer_size, from).detach();     \
+            Handle##T(package, buffer_size, from);                            \
             continue;                                                         \
         }
 
@@ -277,7 +276,7 @@ inline void Server::HandleHandshakeRequest(
 
         /* Get the last timestamp for such a key */
         Peers::timestamps_mutex.lock();
-        unsigned long& last_timestamp =
+        unsigned long last_timestamp =
             Peers::timestamps->Get(package->payload.static_public_key);
         Peers::timestamps_mutex.unlock();
 
@@ -293,17 +292,17 @@ inline void Server::HandleHandshakeRequest(
     unsigned char response_netmask = package->payload.netmask;
 
     /* Handle the local ip address and netmask */
-    std::lock_guard details_lock(Peers::details_mutex);
     {
         /* Get the passed ip and the netmask */
         const unsigned int client_ip = response_ip;
         const unsigned char client_netmask = response_netmask;
 
         /* Try to delete the peer with such a static key (if exists) */
-        for (const auto& [local_ip, details] : *Peers::details)
+        std::lock_guard details_lock(Peers::details_mutex);
+        for (const auto& [ip, details] : *Peers::details)
             if (equal((KeyBuffer)details.static_public_key,
                       (KeyBuffer)package->payload.static_public_key))
-                Peers::details->Delete(local_ip);
+                Peers::details->Delete(ip);
 
         /* If there already an ip address passed */
         if (client_ip != INADDR_ANY && client_netmask != 0) {
@@ -377,13 +376,16 @@ inline void Server::HandleHandshakeRequest(
         .nonce = Nonce(package->header.nonce),
         .endpoint = from
     };
-    memcpy(details.static_public_key,
-           package->payload.static_public_key,
-           crypto_scalarmult_BYTES);
-    memcpy(details.chain_key,
-           chain_key,
-           crypto_aead_chacha20poly1305_KEYBYTES);
-    Peers::details->Put(response_ip, details);
+    {
+        std::lock_guard details_lock(Peers::details_mutex);
+        memcpy(details.static_public_key,
+               package->payload.static_public_key,
+               crypto_scalarmult_BYTES);
+        memcpy(details.chain_key,
+               chain_key,
+               crypto_aead_chacha20poly1305_KEYBYTES);
+        Peers::details->Put(response_ip, details);
+    }
 
     /* Assemble the response */
     HandshakeResponse response(ephemeral_keys.Public(),
@@ -406,14 +408,13 @@ inline void Server::HandleHandshakeRequest(
     );
 
     /* Send the response */
-    main_socket.Send((const char*)(const void*)&response,
+    main_socket.Send((char*)(void*)&response,
                      sizeof(HandshakeResponse),
                      from);
 
     /* Save the peer's chain key */
     std::lock_guard keys_lock(Peers::keys_mutex);
     Peers::keys->Put(from, std::move(chain_key));
-    chain_key.Release();
 }
 
 inline void Server::HandleTransferData(
@@ -421,7 +422,7 @@ inline void Server::HandleTransferData(
     const unsigned int package_size,
     const sockaddr_in from
 ) noexcept {
-    TRACE_LOG("Recieve a transfer data from the %s:%hu",
+    TRACE_LOG("Receive a transfer data from the %s:%hu",
               inet_ntoa(from.sin_addr),
               ntohs(from.sin_port));
 
@@ -430,8 +431,14 @@ inline void Server::HandleTransferData(
 
     /* If the pacakge isn't for the server, send it to the peer */
     if (destination_netb != local_ip.netb) {
-        /* TODO */
-        return;
+        /* Try to send the package to the peer */
+        try {
+            std::lock_guard details_lock(Peers::details_mutex);
+            main_socket.Send((char*)(void*)package.Get(),
+                             package_size,
+                             Peers::details->Get(destination_netb).endpoint);
+            return;
+        } catch (const DictionaryError&) { return; }
     }
 
     /* Try to decrypt the package */
