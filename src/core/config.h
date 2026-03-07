@@ -19,8 +19,7 @@ public:
         static inline LinkedList<String> pre_down;
         static inline LinkedList<String> post_down;
         static inline short listen = 0;
-        static inline int mtu = sizeof(TransferData::payload) -
-                                crypto_aead_chacha20poly1305_ietf_ABYTES;
+        static inline int mtu = 1420;
     };
 
     struct Server final {
