@@ -113,14 +113,16 @@ inline void Client::Init() {
                       sodium_base64_VARIANT_ORIGINAL);
 
     /* Allocate memory for peers */
-    std::lock_guard details_lock(Peers::details_mutex);
+    Peers::details_mutex.lock();
     Peers::details = new Dictionary<unsigned int,
                                     Peers::Details,
                                     unsigned int>(16);
-    std::lock_guard keys_lock(Peers::keys_mutex);
+    Peers::details_mutex.unlock();
+    Peers::keys_mutex.lock();
     Peers::keys = new Dictionary<sockaddr_in,
                                  UniqPtr<unsigned char[]>,
                                  unsigned int>(16);
+    Peers::keys_mutex.unlock();
 }
 
 inline void Client::RunHandshakeLoop() {
@@ -239,17 +241,22 @@ inline void Client::HandleTunPackage(const char* const buffer,
                                      const int buffer_size,
                                      unsigned int destination_netb) noexcept {
     /* Try to get the details from the peers list */
+    Peers::details_mutex.lock();
+    Peers::Details* const details = Peers::details->Get(destination_netb);
+    Peers::details_mutex.unlock();
+
+    /* Init endpoint, key and nonce variables */
     sockaddr_in endpoint;
     const unsigned char* key;
     Nonce* nonce;
-    try {
-        std::lock_guard details_lock(Peers::details_mutex);
-        Peers::Details& details = Peers::details->Get(destination_netb);
-        endpoint = details.endpoint;
-        key = details.key;
-        nonce = &details.nonce;
+
+    /* If there is such and ip in the dictionary */
+    if (details != nullptr) {
+        endpoint = details->endpoint;
+        key = details->key;
+        nonce = &details->nonce;
     /* If there is no such an ip in the dictionary */
-    } catch (const DictionaryError&) {
+    } else {
         endpoint = Server::endpoint;
         key = Server::chain_key;
         nonce = &Server::nonce;
@@ -380,25 +387,27 @@ inline void Client::HandleTransferData(
               inet_ntoa(from.sin_addr),
               ntohs(from.sin_port));
 
+    /* Get the key pointer */
+    std::lock_guard keys_lock(Peers::keys_mutex);
+    const UniqPtr<unsigned char[]>* const key = Peers::keys->Get(from);
+    if (key == nullptr) { return; }
+
     /* Try to decrypt the package */
     unsigned long long buffer_size;
-    try {
-        std::lock_guard keys_lock(Peers::keys_mutex);
-        if (crypto_aead_chacha20poly1305_ietf_decrypt(
-            (unsigned char*)(void*)&package->payload,
-            &buffer_size,
-            nullptr,
-            (unsigned char*)(void*)&package->payload,
-            package_size - sizeof(package->header),
-            (unsigned char*)(void*)&package->header,
-            sizeof(package->header),
-            package->header.nonce,
-            Peers::keys->Get(from).Get()
-        ) != 0) {
-            WARN_LOG("Forged message found");
-            return;
-        }
-    } catch (const DictionaryError&) { return; }
+    if (crypto_aead_chacha20poly1305_ietf_decrypt(
+        (unsigned char*)(void*)&package->payload,
+        &buffer_size,
+        nullptr,
+        (unsigned char*)(void*)&package->payload,
+        package_size - sizeof(package->header),
+        (unsigned char*)(void*)&package->header,
+        sizeof(package->header),
+        package->header.nonce,
+        key->Get()
+    ) != 0) {
+        WARN_LOG("Forged message found");
+        return;
+    }
 
     /* Write the package to the tun */
     tun->Write(package->payload.buffer, (unsigned int)buffer_size);

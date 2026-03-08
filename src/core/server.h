@@ -51,16 +51,16 @@ private:
         static inline LinkedList<const unsigned char*>* public_keys = nullptr;
         static inline std::mutex public_keys_mutex;
         static inline Dictionary<unsigned int,
-                                 Details,
-                                 unsigned int>* details = nullptr;
+        Details,
+        unsigned int>* details = nullptr;
         static inline std::mutex details_mutex;
         static inline Dictionary<KeyBuffer,
-                                 unsigned long,
-                                 unsigned int>* timestamps = nullptr;
+        unsigned long,
+        unsigned int>* timestamps = nullptr;
         static inline std::mutex timestamps_mutex;
         static inline Dictionary<sockaddr_in,
-                                 UniqPtr<unsigned char[]>,
-                                 unsigned int>* keys = nullptr;
+        UniqPtr<unsigned char[]>,
+        unsigned int>* keys = nullptr;
         static inline std::mutex keys_mutex;
     };
 
@@ -75,8 +75,6 @@ private:
         unsigned int package_size,
         sockaddr_in from
     ) noexcept;
-
-    static inline std::mutex _rand_mutex;
 };
 
 inline void Server::SavePeer(const unsigned char* const public_key) {
@@ -105,16 +103,16 @@ inline void Server::Init() {
     /* Allocate the memory for dictionaries */
     std::lock_guard details_lock(Peers::details_mutex);
     Peers::details = new Dictionary<unsigned int,
-                                  Peers::Details,
-                                  unsigned int>(Peers::number);
+        Peers::Details,
+        unsigned int>(Peers::number);
     std::lock_guard timestamps_lock(Peers::timestamps_mutex);
     Peers::timestamps = new Dictionary<KeyBuffer,
-                                       unsigned long,
-                                       unsigned int>(Peers::number);
+        unsigned long,
+        unsigned int>(Peers::number);
     std::lock_guard keys_lock(Peers::keys_mutex);
     Peers::keys = new Dictionary<sockaddr_in,
-                                 UniqPtr<unsigned char[]>,
-                                 unsigned int>(Peers::number);
+        UniqPtr<unsigned char[]>,
+        unsigned int>(Peers::number);
 
     /* Fill timestamps dictionary with zeros */
     std::lock_guard public_keys_lock(Peers::public_keys_mutex);
@@ -129,39 +127,35 @@ inline void Server::HandleTunPackage(const char* const buffer,
                                      const int buffer_size,
                                      const unsigned int destination_netb)
 noexcept {
-    /* Try to send the package to the peer with such an ip address */
-    try {
-        std::lock_guard details_lock(Peers::details_mutex);
-        std::lock_guard keys_lock(Peers::keys_mutex);
-        Peers::Details& details =
-            Peers::details->Get(destination_netb);
-        const unsigned char* const key = Peers::keys->Get(details.endpoint);
+    /* Try to get the peers details */
+    std::lock_guard details_lock(Peers::details_mutex);
+    Peers::Details* const details = Peers::details->Get(destination_netb);
+    if (details == nullptr) return;
 
-        /* Create the response */
-        TransferData package(details.nonce,
-                             destination_netb,
-                             buffer,
-                             buffer_size);
+    /* Create the response */
+    TransferData package(details->nonce,
+                         destination_netb,
+                         buffer,
+                         buffer_size);
 
-        /* Encrypt the package */
-        unsigned long long payload_size;
-        crypto_aead_chacha20poly1305_ietf_encrypt(
-            (unsigned char*)(void*)&package.payload,
-            &payload_size,
-            (unsigned char*)(void*)&package.payload,
-            (unsigned long long)buffer_size,
-            (unsigned char*)(void*)&package.header,
-            sizeof(package.header),
-            nullptr,
-            package.header.nonce,
-            key
-        );
+    /* Encrypt the package */
+    unsigned long long payload_size;
+    crypto_aead_chacha20poly1305_ietf_encrypt(
+        (unsigned char*)(void*)&package.payload,
+        &payload_size,
+        (unsigned char*)(void*)&package.payload,
+        (unsigned long long)buffer_size,
+        (unsigned char*)(void*)&package.header,
+        sizeof(package.header),
+        nullptr,
+        package.header.nonce,
+        details->chain_key
+    );
 
-        /* Send the encrypted message */
-        main_socket.Send((char*)(void*)&package,
-                         sizeof(package.header) + payload_size,
-                         details.endpoint);
-    } catch (const DictionaryError&) { return; }
+    /* Send the encrypted message */
+    main_socket.Send((char*)(void*)&package,
+                     sizeof(package.header) + payload_size,
+                     details->endpoint);
 }
 
 inline void Server::RunHandlePackagesLoop() noexcept {
@@ -278,7 +272,7 @@ inline void Server::HandleHandshakeRequest(
         /* Get the last timestamp for such a key */
         Peers::timestamps_mutex.lock();
         unsigned long last_timestamp =
-            Peers::timestamps->Get(package->payload.static_public_key);
+            *Peers::timestamps->Get(package->payload.static_public_key);
         Peers::timestamps_mutex.unlock();
 
         /* Compare current timestamp with the last one */
@@ -318,10 +312,8 @@ inline void Server::HandleHandshakeRequest(
             /* Try to get the random ip in the local network */
             const unsigned int start = network_prefix.hostb;
             const unsigned int end = broadcast.hostb;
-            _rand_mutex.lock();
             const unsigned int random_ip =
                 (unsigned int)(start + (rand() % (end - start + 1)));
-            _rand_mutex.unlock();
             const unsigned int random_ip_netb = htonl(random_ip);
             if (!Peers::details->Has(random_ip_netb)) {
                 response_ip = random_ip_netb;
@@ -432,35 +424,40 @@ inline void Server::HandleTransferData(
 
     /* If the pacakge isn't for the server, send it to the peer */
     if (destination_netb != local_ip.netb) {
-        /* Try to send the package to the peer */
-        try {
-            std::lock_guard details_lock(Peers::details_mutex);
-            main_socket.Send((char*)(void*)package,
-                             package_size,
-                             Peers::details->Get(destination_netb).endpoint);
-            return;
-        } catch (const DictionaryError&) { return; }
+        /* Try to get the peer endpoint */
+        std::lock_guard details_lock(Peers::details_mutex);
+        const Peers::Details* const peer_details =
+            Peers::details->Get(destination_netb);
+        if (peer_details == nullptr) return;
+
+        /* Send the package to the peer */
+        main_socket.Send((char*)(void*)package,
+                         package_size,
+                         peer_details->endpoint);
+        return;
     }
 
-    /* Try to decrypt the package */
+    /* Try to get the key to decrypt the package */
+    std::lock_guard keys_lock(Peers::keys_mutex);
+    const UniqPtr<unsigned char[]>* const key = Peers::keys->Get(from);
+    if (key == nullptr) return;
+
+    /* Decrypt the package */
     unsigned long long buffer_size;
-    try {
-        std::lock_guard keys_lock(Peers::keys_mutex);
-        if (crypto_aead_chacha20poly1305_ietf_decrypt(
-            (unsigned char*)(void*)&package->payload,
-            &buffer_size,
-            nullptr,
-            (unsigned char*)(void*)&package->payload,
-            package_size - sizeof(package->header),
-            (unsigned char*)(void*)&package->header,
-            sizeof(package->header),
-            package->header.nonce,
-            Peers::keys->Get(from).Get()
-        ) != 0) {
-            WARN_LOG("Forged message found");
-            return;
-        }
-    } catch (const DictionaryError&) { return; }
+    if (crypto_aead_chacha20poly1305_ietf_decrypt(
+        (unsigned char*)(void*)&package->payload,
+        &buffer_size,
+        nullptr,
+        (unsigned char*)(void*)&package->payload,
+        package_size - sizeof(package->header),
+        (unsigned char*)(void*)&package->header,
+        sizeof(package->header),
+        package->header.nonce,
+        key->Get()
+    ) != 0) {
+        WARN_LOG("Forged message found");
+        return;
+    }
 
     /* Write the decrypted package to the TUN */
     tun->Write(package->payload.buffer, (unsigned int)buffer_size);
