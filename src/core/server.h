@@ -32,11 +32,11 @@ public:
 
     inline static void Init();
 
-    inline static void RunHandlePackagesLoop();
+    inline static void RunHandlePackagesLoop() noexcept;
 
     inline static void HandleTunPackage(const char* buffer,
                                         int buffer_size,
-                                        unsigned int destination_netb);
+                                        unsigned int destination_netb) noexcept;
 
 private:
     struct Peers {
@@ -65,13 +65,13 @@ private:
     };
 
     inline static void HandleHandshakeRequest(
-        UniqPtr<HandshakeRequest> package,
+        HandshakeRequest* package,
         unsigned int package_size,
         sockaddr_in from
     );
 
     inline static void HandleTransferData(
-        UniqPtr<TransferData> package,
+        TransferData* package,
         unsigned int package_size,
         sockaddr_in from
     ) noexcept;
@@ -127,7 +127,8 @@ inline void Server::Init() {
 
 inline void Server::HandleTunPackage(const char* const buffer,
                                      const int buffer_size,
-                                     const unsigned int destination_netb) {
+                                     const unsigned int destination_netb)
+noexcept {
     /* Try to send the package to the peer with such an ip address */
     try {
         std::lock_guard details_lock(Peers::details_mutex);
@@ -163,7 +164,7 @@ inline void Server::HandleTunPackage(const char* const buffer,
     } catch (const DictionaryError&) { return; }
 }
 
-inline void Server::RunHandlePackagesLoop() {
+inline void Server::RunHandlePackagesLoop() noexcept {
     /* Allocate the memory for the buffer */
     char buffer[UDPSocket::MTU];
 
@@ -181,25 +182,25 @@ inline void Server::RunHandlePackagesLoop() {
         if (raw_type > TRANSFER_DATA) return;
         const PackageType type = (PackageType)raw_type;
 
-#undef COPY_BUFFER_TO_HEAP_AND_HANDLE_IT
-#define COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(T)                                  \
+#undef HANDLE_PACKAGE
+#define HANDLE_PACKAGE(T)                                                     \
         {                                                                     \
-            T* package = new T(*(const T*)(const void*)buffer);               \
-            Handle##T(package, buffer_size, from);                            \
+            T* const package = (T*)(void*)buffer;                             \
+            Handle##T(package, (unsigned int)buffer_size, from);              \
             continue;                                                         \
         }
 
         /* Handle the package by its type */
         if (type == HANDSHAKE_REQUEST)
             if (buffer_size == sizeof(HandshakeRequest))
-                COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(HandshakeRequest);
+                HANDLE_PACKAGE(HandshakeRequest);
         if (type == TRANSFER_DATA)
-                COPY_BUFFER_TO_HEAP_AND_HANDLE_IT(TransferData);
+                HANDLE_PACKAGE(TransferData);
     }
 }
 
 inline void Server::HandleHandshakeRequest(
-    const UniqPtr<HandshakeRequest> package,
+    HandshakeRequest* const package,
     const unsigned int package_size,
     const sockaddr_in from
 ) {
@@ -418,7 +419,7 @@ inline void Server::HandleHandshakeRequest(
 }
 
 inline void Server::HandleTransferData(
-    const UniqPtr<TransferData> package,
+    TransferData* const package,
     const unsigned int package_size,
     const sockaddr_in from
 ) noexcept {
@@ -434,7 +435,7 @@ inline void Server::HandleTransferData(
         /* Try to send the package to the peer */
         try {
             std::lock_guard details_lock(Peers::details_mutex);
-            main_socket.Send((char*)(void*)package.Get(),
+            main_socket.Send((char*)(void*)package,
                              package_size,
                              Peers::details->Get(destination_netb).endpoint);
             return;
