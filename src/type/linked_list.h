@@ -1,11 +1,10 @@
 #pragma once
 
-#include "exception/linked_list_error.h"
 #include "util/class.h"
 
 template <typename T>
-class LinkedList {
-protected:
+class LinkedList final {
+private:
     struct Node;
 
 public:
@@ -15,42 +14,33 @@ public:
 
     virtual ~LinkedList() noexcept;
 
-    T& Head();
+    T* Head() noexcept;
 
-    const T& Head() const;
+    const T* Head() const noexcept;
 
-    T& Tail();
+    T* Tail() noexcept;
 
-    const T& Tail() const;
+    const T* Tail() const noexcept;
 
     void Push(const T& element) noexcept;
 
     void Push(T&& element) noexcept;
 
-    void Pop();
+    bool Pop() noexcept;
 
-    bool TryPop() noexcept;
+    unsigned int Pop(unsigned int number) noexcept;
 
-    void Pop(unsigned int number);
+    bool PopTail() noexcept;
 
-    unsigned int TryPop(unsigned int number) noexcept;
+    bool RemoveFirst(const T& element) noexcept;
 
-    void PopTail();
+    unsigned int Remove(const T& element) noexcept;
 
-    bool TryPopTail() noexcept;
+    unsigned int Remove(unsigned int index, unsigned int number = 1) noexcept;
 
-    void Remove(unsigned int index, unsigned int number = 1);
+    T* Get(unsigned int index) noexcept;
 
-    unsigned int TryRemove(unsigned int index, unsigned int number = 1)
-    noexcept;
-
-    void Remove(const T& element,
-                bool (*equal) (const T& e1, const T& e2) =
-                    [](const T& e1, const T& e2) { return e1 == e2; });
-
-    T& Get(unsigned int index);
-
-    const T& Get(unsigned int index) const;
+    const T* Get(unsigned int index) const noexcept;
 
     class Iterator {
     public:
@@ -72,7 +62,7 @@ public:
 
     Iterator end() const noexcept;
 
-protected:
+private:
     struct Node final {
         explicit Node(const T& value) noexcept;
 
@@ -86,8 +76,6 @@ protected:
     Node* _tail = nullptr;
 
     void CutNode(Node*& node) noexcept;
-
-    virtual void FreeNode(Node* node) const noexcept;
 };
 
 template <typename T>
@@ -96,31 +84,23 @@ LinkedList<T>::~LinkedList() noexcept {
 }
 
 template <typename T>
-T& LinkedList<T>::Head() {
-    if (_head == nullptr)
-        throw LinkedListError("Head(): index out of range");
-    return _head->value;
+T* LinkedList<T>::Head() noexcept {
+    return _head == nullptr ? nullptr : &_head->value;
 }
 
 template <typename T>
-const T& LinkedList<T>::Head() const {
-    if (_head == nullptr)
-        throw LinkedListError("Head(): index out of range");
-    return _head->value;
+const T* LinkedList<T>::Head() const noexcept {
+    return _head == nullptr ? nullptr : &_head->value;
 }
 
 template <typename T>
-T& LinkedList<T>::Tail() {
-    if (_tail == nullptr)
-        throw LinkedListError("Tail(): index out of range");
-    return _tail->value;
+T* LinkedList<T>::Tail() noexcept {
+    return _tail == nullptr ? nullptr : &_tail->value;
 }
 
 template <typename T>
-const T& LinkedList<T>::Tail() const {
-    if (_tail == nullptr)
-        throw LinkedListError("Tail(): index out of range");
-    return _tail->value;
+const T* LinkedList<T>::Tail() const noexcept {
+    return _tail == nullptr ? nullptr : &_tail->value;
 }
 
 template <typename T>
@@ -154,15 +134,7 @@ void LinkedList<T>::Push(T&& element) noexcept {
 }
 
 template <typename T>
-void LinkedList<T>::Pop() {
-    if (_head == nullptr)
-        throw LinkedListError("Pop(): index out of range");
-    CutNode(_head);
-    if (_head == nullptr) _tail = nullptr;
-}
-
-template <typename T>
-bool LinkedList<T>::TryPop() noexcept {
+bool LinkedList<T>::Pop() noexcept {
     if (_head == nullptr) return false;
     CutNode(_head);
     if (_head == nullptr) _tail = nullptr;
@@ -170,20 +142,8 @@ bool LinkedList<T>::TryPop() noexcept {
 }
 
 template <typename T>
-void LinkedList<T>::Pop(unsigned int number) {
-    while (number-- > 0) {
-        if (_head == nullptr) {
-            _tail = nullptr;
-            throw LinkedListError("Pop(unsigned int): index out of range");
-        }
-        CutNode(_head);
-    }
-    if (_head == nullptr) _tail = nullptr;
-}
-
-template <typename T>
-unsigned int LinkedList<T>::TryPop(const unsigned int number) noexcept {
-    for (unsigned int i = 0; i < number; i++) {
+unsigned int LinkedList<T>::Pop(const unsigned int number) noexcept {
+    for (unsigned int i = 0; i < number; ++i) {
         if (_head == nullptr) {
             _tail = nullptr;
             return i;
@@ -195,46 +155,43 @@ unsigned int LinkedList<T>::TryPop(const unsigned int number) noexcept {
 }
 
 template <typename T>
-void LinkedList<T>::Remove(unsigned int index, unsigned int number) {
-    /* If we are deleting first elements */
-    if (index == 0) {
-        try {
-            Pop(number);
-        } catch (const LinkedListError&) {
-            throw LinkedListError(
-                "Remove(unsigned int, unsigned int): index out of range"
-            );
+bool LinkedList<T>::RemoveFirst(const T& element) noexcept {
+    /* Go through all the elements while there is no one equal */
+    Node* node_ptr = _head;
+    while (node_ptr != nullptr) {
+        if (equal(node_ptr->value, element)) {
+            CutNode(node_ptr);
+            return true;
         }
-        return;
+        node_ptr = node_ptr->next;
     }
 
-    /* Get the element before the removable */
-    Node* before_removable = _head;
-    while (index-- > 1) {
-        if (before_removable == nullptr) throw LinkedListError(
-                "Remove(unsigned int, unsigned int): index out of range"
-            );
-        before_removable = before_removable->next;
-    }
-
-    /* Remove elements */
-    while (number-- > 0) {
-      if ((before_removable == nullptr) || !before_removable->next)
-        throw LinkedListError(
-            "Remove(unsigned int, unsigned int): index out of range");
-      CutNode(before_removable->next);
-
-      /* If we got the last element, update the tail */
-      if (!before_removable->next)
-        _tail = before_removable;
-    }
+    /* If there is no such an element */
+    return false;
 }
 
 template <typename T>
-unsigned int LinkedList<T>::TryRemove(unsigned int index,
-                                      unsigned int number) noexcept {
+unsigned int LinkedList<T>::Remove(const T& element) noexcept {
+    /* Go through all the elements and delete equal */
+    Node* node_ptr = _head;
+    unsigned int result = 0;
+    while (node_ptr != nullptr) {
+        if (equal(node_ptr->value, element)) {
+            CutNode(node_ptr);
+            ++result;
+        }
+        node_ptr = node_ptr->next;
+    }
+
+    /* If there is no such an element */
+    return result;
+}
+
+template <typename T>
+unsigned int LinkedList<T>::Remove(unsigned int index,
+                                   unsigned int number) noexcept {
     /* If we are deleting first elements */
-    if (index == 0) return TryPop(number);
+    if (index == 0) return Pop(number);
 
     /* Get the element before the removable */
     Node* before_removable = _head;
@@ -251,7 +208,7 @@ unsigned int LinkedList<T>::TryRemove(unsigned int index,
         if ((before_removable == nullptr) || !before_removable->next)
             return result;
         CutNode(before_removable->next);
-        result++;
+        ++result;
 
         /* If we get the last element, update the tail */
         if (!before_removable->next) _tail = before_removable;
@@ -265,72 +222,7 @@ unsigned int LinkedList<T>::TryRemove(unsigned int index,
 }
 
 template <typename T>
-void LinkedList<T>::Remove(const T& element,
-                           bool (*const equal) (const T& e1, const T& e2)) {
-    /* Check the equal function */
-    if (equal == nullptr)
-        throw LinkedListError(
-            "Remove(const T&, bool (*)(const T&, const T&)): "
-            "equal function == nullptr"
-        );
-
-    /* If the list is empty */
-    if (_head == nullptr)
-        throw LinkedListError(
-            "Remove(const T&, bool (*)(const T&, const T&)): "
-            "no such an element"
-        );
-
-    /* If our element is a head */
-    if (equal(_head->value, element)) { Pop(); return; }
-
-    /* Get the element before the removable */
-    Node* before_removable = _head;
-    while (before_removable->next != nullptr) {
-        if (equal(before_removable->next->value, element))
-            break;
-        before_removable = before_removable->next;
-    }
-
-    /* If there is no such an element */
-    if (before_removable->next == nullptr)
-        throw LinkedListError(
-            "Remove(const T&, bool (*)(const T&, const T&)): "
-            "no such an element"
-        );
-
-    /* Cut the node */
-    CutNode(before_removable->next);
-
-    /* If we got the last element, update the tail */
-    if (before_removable->next == nullptr) _tail = before_removable;
-}
-
-template <typename T>
-void LinkedList<T>::PopTail() {
-    /* If the list is empty */
-    if (_head == nullptr)
-        throw LinkedListError("PopTail(): index out of range");
-
-    /* If we have only one element */
-    if (!_head->next) {
-        CutNode(_head);
-        _tail = nullptr;
-        return;
-    }
-
-    /* Get the second last node */
-    Node* second_last_node = _head;
-    while (second_last_node->next->next)
-        second_last_node = second_last_node->next;
-
-    /* Change the tail */
-    CutNode(second_last_node->next);
-    _tail = second_last_node;
-}
-
-template <typename T>
-bool LinkedList<T>::TryPopTail() noexcept {
+bool LinkedList<T>::PopTail() noexcept {
     /* If the list is empty */
     if (_head == nullptr) return false;
 
@@ -353,29 +245,24 @@ bool LinkedList<T>::TryPopTail() noexcept {
 }
 
 template <typename T>
-T& LinkedList<T>::Get(unsigned int index) {
+T* LinkedList<T>::Get(unsigned int index) noexcept {
     Node* node_ptr = _head;
     while (index-- > 0) {
         node_ptr = node_ptr->next;
-        if (node_ptr == nullptr)
-            throw LinkedListError(
-                "operator[](unsigned int): index out of range"
-            );
+        if (node_ptr == nullptr) return nullptr;
     }
-    return node_ptr->value;
+    return &node_ptr->value;
 }
 
 template <typename T>
-const T& LinkedList<T>::Get(unsigned int index) const {
+const T* LinkedList<T>::Get(unsigned int index) const noexcept {
     Node* node_ptr = _head;
     while (index-- > 0) {
         node_ptr = node_ptr->next;
-        if (node_ptr == nullptr)
-            throw LinkedListError(
-                "operator[](unsigned int): index out of range"
-            );
+        if (node_ptr == nullptr) return nullptr;
     }
-    return node_ptr->value;
+    return &node_ptr->value;
+
 }
 
 template <typename T>
@@ -405,12 +292,12 @@ LinkedList<T>::Iterator::operator!=(const Iterator& other) const noexcept {
 }
 
 template <typename T>
-T&
-LinkedList<T>::Iterator::operator*() noexcept { return _node->value; }
+T& LinkedList<T>::Iterator::operator*()
+noexcept { return _node->value; }
 
 template <typename T>
-const T&
-LinkedList<T>::Iterator::operator*() const noexcept { return _node->value; }
+const T& LinkedList<T>::Iterator::operator*()
+const noexcept { return _node->value; }
 
 template <typename T>
 LinkedList<T>::Iterator& LinkedList<T>::Iterator::operator++() noexcept {
@@ -421,11 +308,6 @@ LinkedList<T>::Iterator& LinkedList<T>::Iterator::operator++() noexcept {
 template <typename T>
 void LinkedList<T>::CutNode(Node*& node) noexcept {
     Node* const next_node = node->next;
-    FreeNode(node);
-    node = next_node;
-}
-
-template <typename T>
-void LinkedList<T>::FreeNode(Node* const node) const noexcept {
     delete node;
+    node = next_node;
 }

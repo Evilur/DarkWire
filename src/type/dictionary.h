@@ -2,7 +2,6 @@
 
 #include "linked_list.h"
 #include "util/class.h"
-#include "exception/dictionary_error.h"
 #include "util/equal.h"
 #include "util/hash.h"
 
@@ -33,33 +32,29 @@ public:
      * Put an element into the hash map
      * @param key The key that can be used to retrieve the element
      * @param element Element to put into the map
-     * @throw DictionaryError If there is already an element with such a key
      */
-    void Put(const K& key, const T& element);
+    bool Put(const K& key, const T& element) noexcept;
 
     /**
      * Put an element into the hash map
      * @param key The key that can be used to retrieve the element
      * @param element Element to put into the map
-     * @throw DictionaryError If there is already an element with such a key
      */
-    void Put(const K& key, T&& element);
+    bool Put(const K& key, T&& element) noexcept;
 
     /**
      * Get the element from the hash map by the key
      * @param key The key to get the element by
-     * @throw DictionaryError If there is no an element with such a key
      * @return Element with such a key, nullptr if there is no such element
      */
-    T& Get(const K& key);
+    T* Get(const K& key) noexcept;
 
     /**
      * Get the element from the hash map by the key
      * @param key The key to get the element by
-     * @throw DictionaryError If there is no an element with such a key
      * @return Element with such a key, nullptr if there is no such element
      */
-    const T& Get(const K& key) const;
+    const T* Get(const K& key) const noexcept;
 
     /**
      * Check the existence of the element in the hash map
@@ -72,7 +67,7 @@ public:
      * Delete the element from the hash map
      * @param key The key to delete the element by
      */
-    void Delete(const K& key);
+    bool Delete(const K& key) noexcept;
 
     /**
      * Iterator to go through the hash map
@@ -153,65 +148,63 @@ template <typename K, typename T, typename S>
 Dictionary<K, T, S>::~Dictionary() noexcept { delete[] _buckets; }
 
 template <typename K, typename T, typename S>
-void Dictionary<K, T, S>::Put(const K& key, const T& element) {
+bool Dictionary<K, T, S>::Put(const K& key, const T& element) noexcept {
     /* Calculate the key hash */
     const S hash = ::hash(key) % _capacity;
 
     /* Try to get the node from the linked list */
     for (const Node& node : _buckets[hash])
         if (equal(node.key, key))
-            throw DictionaryError(
-                "Put(): An element with such a key already exists"
-            );
+            return false;
 
     /* If there is no an element with such a key yet,
      * put the node to the one of the buckets, according to the hash */
     _buckets[hash].Push({ key, element });
+    return true;
 }
 
 template <typename K, typename T, typename S>
-void Dictionary<K, T, S>::Put(const K& key, T&& element) {
+bool Dictionary<K, T, S>::Put(const K& key, T&& element) noexcept {
     /* Calculate the key hash */
     const S hash = ::hash(key) % _capacity;
 
     /* Try to get the node from the linked list */
     for (const Node& node : _buckets[hash])
         if (equal(node.key, key))
-            throw DictionaryError(
-                "Put(): An element with such a key already exists"
-            );
+            return false;
 
     /* If there is no an element with such a key yet,
      * put the node to the one of the buckets, according to the hash */
     _buckets[hash].Push({ key, std::move(element) });
+    return true;
 }
 
 template <typename K, typename T, typename S>
-T& Dictionary<K, T, S>::Get(const K& key) {
+T* Dictionary<K, T, S>::Get(const K& key) noexcept {
     /* Calculate the key hash */
     const S hash = ::hash(key) % _capacity;
 
     /* Try to get the node from the linked list */
     for (Node& node : _buckets[hash])
         if (equal(node.key, key))
-            return node.element;
+            return &node.element;
 
-    /* If there is NOT an element in the linked list, throw an error */
-    throw DictionaryError("Get(): no such an element");
+    /* If there is NOT an element in the linked list, return nullptr */
+    return nullptr;
 }
 
 template <typename K, typename T, typename S>
-const T& Dictionary<K, T, S>::Get(const K& key) const {
+const T* Dictionary<K, T, S>::Get(const K& key) const noexcept {
     /* Calculate the key hash */
     const S hash = ::hash(key) % _capacity;
 
     /* Try to get the node from the linked list */
     for (const Node& node : _buckets[hash])
         if (equal(node.key, key))
-            return node.element;
+            return &node.element;
 
-    /* If there is NOT an element in the linked list, throw an error */
-    throw DictionaryError("Get(): no such an element");
+    /* If there is NOT an element in the linked list, return nullptr */
+    return nullptr;
 }
 
 template <typename K, typename T, typename S>
@@ -229,12 +222,12 @@ bool Dictionary<K, T, S>::Has(const K& key) const noexcept {
 }
 
 template <typename K, typename T, typename S>
-void Dictionary<K, T, S>::Delete(const K& key) {
+bool Dictionary<K, T, S>::Delete(const K& key) noexcept {
     /* Calculate the key hash */
     const S hash = ::hash(key) % _capacity;
 
     /* Try to get the node from the linked list */
-    short index = 0;
+    S index = 0;
     bool has_element = false;
     for (const Node& node : _buckets[hash]) {
         if (equal(node.key, key)) {
@@ -245,11 +238,11 @@ void Dictionary<K, T, S>::Delete(const K& key) {
     }
 
     /* Throw an error if there is no an element with such a key */
-    if (!has_element)
-        throw DictionaryError("Delete(): no such an element");
+    if (!has_element) return false;
 
     /* If all is OK delete the element with such an index from the bucket */
     _buckets[hash].Remove(index);
+    return true;
 }
 
 template <typename K, typename T, typename S>
