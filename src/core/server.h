@@ -422,43 +422,81 @@ inline void Server::HandleTransferData(
     /* Get the destination IP address */
     const unsigned int destination_netb = package->header.destination_ip;
 
-    /* If the pacakge isn't for the server, send it to the peer */
-    if (destination_netb != local_ip.netb) {
-        /* Try to get the peer endpoint */
-        std::lock_guard details_lock(Peers::details_mutex);
-        const Peers::Details* const peer_details =
-            Peers::details->Get(destination_netb);
-        if (peer_details == nullptr) return;
+    /* If we need to decrypt the package */
+    if (destination_netb == INADDR_ANY || destination_netb == local_ip.netb) {
+        /* Try to get the key to decrypt the package */
+        std::lock_guard keys_lock(Peers::keys_mutex);
+        const UniqPtr<unsigned char[]>* const key = Peers::keys->Get(from);
+        if (key == nullptr) return;
 
-        /* Send the package to the peer */
-        main_socket.Send((char*)(void*)package,
-                         package_size,
-                         peer_details->endpoint);
+        /* Decrypt the package */
+        unsigned long long buffer_size;
+        if (crypto_aead_chacha20poly1305_ietf_decrypt(
+            (unsigned char*)(void*)&package->payload,
+            &buffer_size,
+            nullptr,
+            (unsigned char*)(void*)&package->payload,
+            package_size - sizeof(package->header),
+            (unsigned char*)(void*)&package->header,
+            sizeof(package->header),
+            package->header.nonce,
+            key->Get()
+        ) != 0) {
+            WARN_LOG("Forged message found");
+            return;
+        }
+
+        /* If we need to resend the package to the other peer */
+        if (destination_netb == INADDR_ANY) {
+            /* Try to get the peer from the dictionary */
+            Peers::Details* const peer_details =
+                Peers::details->Get(((iphdr*)(void*)&package->payload)->daddr);
+            if (peer_details == nullptr) return;
+
+            TRACE_LOG("Resend the package to the %s:%hu",
+                      inet_ntoa(peer_details->endpoint.sin_addr),
+                      ntohs(peer_details->endpoint.sin_port));
+
+            /* Update the nonce */
+            peer_details->nonce.Copy(package->header.nonce);
+
+            /* Encrypt the package */
+            crypto_aead_chacha20poly1305_ietf_encrypt(
+                (unsigned char*)(void*)&package->payload,
+                &buffer_size,
+                (unsigned char*)(void*)&package->payload,
+                buffer_size,
+                (unsigned char*)(void*)&package->header,
+                sizeof(package->header),
+                nullptr,
+                package->header.nonce,
+                peer_details->chain_key
+            );
+
+            /* Send the encrypted package */
+            main_socket.Send((char*)(void*)package,
+                             package_size,
+                             peer_details->endpoint);
+        } else {
+            /* Write the decrypted package to the TUN */
+            tun->Write(package->payload.buffer, (unsigned int)buffer_size);
+        }
         return;
     }
 
-    /* Try to get the key to decrypt the package */
-    std::lock_guard keys_lock(Peers::keys_mutex);
-    const UniqPtr<unsigned char[]>* const key = Peers::keys->Get(from);
-    if (key == nullptr) return;
+    /* If we need to transit the package */
+    /* Try to get the peer endpoint */
+    std::lock_guard details_lock(Peers::details_mutex);
+    const Peers::Details* const peer_details =
+        Peers::details->Get(destination_netb);
+    if (peer_details == nullptr) return;
 
-    /* Decrypt the package */
-    unsigned long long buffer_size;
-    if (crypto_aead_chacha20poly1305_ietf_decrypt(
-        (unsigned char*)(void*)&package->payload,
-        &buffer_size,
-        nullptr,
-        (unsigned char*)(void*)&package->payload,
-        package_size - sizeof(package->header),
-        (unsigned char*)(void*)&package->header,
-        sizeof(package->header),
-        package->header.nonce,
-        key->Get()
-    ) != 0) {
-        WARN_LOG("Forged message found");
-        return;
-    }
+    TRACE_LOG("Transit the package to the %s:%hu",
+              inet_ntoa(peer_details->endpoint.sin_addr),
+              ntohs(peer_details->endpoint.sin_port));
 
-    /* Write the decrypted package to the TUN */
-    tun->Write(package->payload.buffer, (unsigned int)buffer_size);
+    /* Send the package to the peer */
+    main_socket.Send((char*)(void*)package,
+                     package_size,
+                     peer_details->endpoint);
 }

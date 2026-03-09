@@ -239,7 +239,8 @@ inline void Client::RunKeepAliveLoop() noexcept {
 
 inline void Client::HandleTunPackage(const char* const buffer,
                                      const int buffer_size,
-                                     unsigned int destination_netb) noexcept {
+                                     unsigned int destination_netb)
+noexcept {
     /* Try to get the details from the peers list */
     Peers::details_mutex.lock();
     Peers::Details* const details = Peers::details->Get(destination_netb);
@@ -260,7 +261,7 @@ inline void Client::HandleTunPackage(const char* const buffer,
         endpoint = Server::endpoint;
         key = Server::chain_key;
         nonce = &Server::nonce;
-        destination_netb = Server::local_ip_netb;
+        destination_netb = INADDR_ANY;
 
         /* TODO */
         /* Get the peer from the server */
