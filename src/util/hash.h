@@ -4,6 +4,7 @@
 #include "core/key_buffer.h"
 
 #include <cstring>
+#include <netinet/in.h>
 #include <sodium.h>
 #include <type_traits>
 
@@ -18,6 +19,9 @@ inline unsigned long hash(const T& element) noexcept;
 
 template <>
 inline unsigned long hash(const char* const& element) noexcept;
+
+template <>
+inline unsigned long hash(const sockaddr_in& element) noexcept;
 
 template <>
 inline unsigned long hash(const String& element) noexcept;
@@ -58,6 +62,11 @@ inline unsigned long hash(const T& element) noexcept {
 template <>
 inline unsigned long hash(const char* const& element) noexcept {
     return calculate((const unsigned char*)element, strlen(element));
+}
+
+template <>
+inline unsigned long hash(const sockaddr_in& element) noexcept {
+    return element.sin_addr.s_addr + element.sin_port;
 }
 
 template <>
