@@ -6,13 +6,16 @@
 #include "util/hash.h"
 
 template <typename T>
-using optimal_param =
+using dictionary_optimal_param =
     std::conditional_t<std::is_fundamental_v<T>, T, const T&>;
 
 template <typename T>
-using hash_func = unsigned long(*)(
+using dictionary_hash_func = unsigned long(*)(
     std::conditional_t<std::is_integral_v<T>, T, const T&>
 );
+
+template <typename T>
+using dictionary_equal = bool(*)(const T&, const T&);
 
 /**
  * A simple implementation of a hash map
@@ -20,10 +23,13 @@ using hash_func = unsigned long(*)(
  * @tparam K Key typename
  * @tparam T Element typename
  * @tparam S Size typename
- * @tparam H Hash typename
+ * @tparam H Hash function
+ * @tparam E Equal function
  */
 template <typename K, typename T,
-typename S = unsigned short, hash_func<K> H = ::hash>
+typename S = unsigned short,
+dictionary_hash_func<K> H = ::hash,
+dictionary_equal<K> E = ::equal>
 class Dictionary final {
     struct Node;
 public:
@@ -44,41 +50,41 @@ public:
      * @param key The key that can be used to retrieve the element
      * @param element Element to put into the map
      */
-    bool Put(optimal_param<K> key, const T& element) noexcept;
+    bool Put(dictionary_optimal_param<K> key, const T& element) noexcept;
 
     /**
      * Put an element into the hash map
      * @param key The key that can be used to retrieve the element
      * @param element Element to put into the map
      */
-    bool Put(optimal_param<K> key, T&& element) noexcept;
+    bool Put(dictionary_optimal_param<K> key, T&& element) noexcept;
 
     /**
      * Get the element from the hash map by the key
      * @param key The key to get the element by
      * @return Element with such a key, nullptr if there is no such element
      */
-    T* Get(optimal_param<K> key) noexcept;
+    T* Get(dictionary_optimal_param<K> key) noexcept;
 
     /**
      * Get the element from the hash map by the key
      * @param key The key to get the element by
      * @return Element with such a key, nullptr if there is no such element
      */
-    const T* Get(optimal_param<K> key) const noexcept;
+    const T* Get(dictionary_optimal_param<K> key) const noexcept;
 
     /**
      * Check the existence of the element in the hash map
      * @param key The key to check the element by
      * @return true if the element exists, false otherwise
      */
-    bool Has(optimal_param<K> key) const noexcept;
+    bool Has(dictionary_optimal_param<K> key) const noexcept;
 
     /**
      * Delete the element from the hash map
      * @param key The key to delete the element by
      */
-    bool Delete(optimal_param<K> key) noexcept;
+    bool Delete(dictionary_optimal_param<K> key) noexcept;
 
     /**
      * Iterator to go through the hash map
@@ -152,22 +158,28 @@ private:
     const S _capacity;
 };
 
-template <typename K, typename T, typename S, hash_func<K> H>
-Dictionary<K, T, S, H>::Dictionary(const S capacity) noexcept :
+template <typename K, typename T, typename S,
+dictionary_hash_func<K> H,
+dictionary_equal<K> E>
+Dictionary<K, T, S, H, E>::Dictionary(const S capacity) noexcept :
         _buckets(new LinkedList<Node>[capacity]), _capacity(capacity) { }
 
-template <typename K, typename T, typename S, hash_func<K> H>
-Dictionary<K, T, S, H>::~Dictionary() noexcept { delete[] _buckets; }
+template <typename K, typename T, typename S,
+dictionary_hash_func<K> H,
+dictionary_equal<K> E>
+Dictionary<K, T, S, H, E>::~Dictionary() noexcept { delete[] _buckets; }
 
-template <typename K, typename T, typename S, hash_func<K> H>
-bool Dictionary<K, T, S, H>::Put(optimal_param<K> key,const T& element)
-noexcept {
+template <typename K, typename T, typename S,
+dictionary_hash_func<K> H,
+dictionary_equal<K> E>
+bool Dictionary<K, T, S, H, E>::Put(dictionary_optimal_param<K> key,
+                                 const T& element) noexcept {
     /* Calculate the key hash */
     const S hash = H(key) % _capacity;
 
     /* Try to get the node from the linked list */
     for (const Node& node : _buckets[hash])
-        if (equal(node.key, key))
+        if (E(node.key, key))
             return false;
 
     /* If there is no an element with such a key yet,
@@ -176,14 +188,17 @@ noexcept {
     return true;
 }
 
-template <typename K, typename T, typename S, hash_func<K> H>
-bool Dictionary<K, T, S, H>::Put(optimal_param<K> key, T&& element) noexcept {
+template <typename K, typename T, typename S,
+dictionary_hash_func<K> H,
+dictionary_equal<K> E>
+bool Dictionary<K, T, S, H, E>::Put(dictionary_optimal_param<K> key,
+                                 T&& element) noexcept {
     /* Calculate the key hash */
     const S hash = H(key) % _capacity;
 
     /* Try to get the node from the linked list */
     for (const Node& node : _buckets[hash])
-        if (equal(node.key, key))
+        if (E(node.key, key))
             return false;
 
     /* If there is no an element with such a key yet,
@@ -192,50 +207,61 @@ bool Dictionary<K, T, S, H>::Put(optimal_param<K> key, T&& element) noexcept {
     return true;
 }
 
-template <typename K, typename T, typename S, hash_func<K> H>
-T* Dictionary<K, T, S, H>::Get(optimal_param<K> key) noexcept {
+template <typename K, typename T, typename S,
+dictionary_hash_func<K> H,
+dictionary_equal<K> E>
+T* Dictionary<K, T, S, H, E>::Get(dictionary_optimal_param<K> key) noexcept {
     /* Calculate the key hash */
     const S hash = H(key) % _capacity;
 
     /* Try to get the node from the linked list */
     for (Node& node : _buckets[hash])
-        if (equal(node.key, key))
+        if (E(node.key, key))
             return &node.element;
 
     /* If there is NOT an element in the linked list, return nullptr */
     return nullptr;
 }
 
-template <typename K, typename T, typename S, hash_func<K> H>
-const T* Dictionary<K, T, S, H>::Get(optimal_param<K> key) const noexcept {
+template <typename K, typename T, typename S,
+dictionary_hash_func<K> H,
+dictionary_equal<K> E>
+const T* Dictionary<K, T, S, H, E>::Get(dictionary_optimal_param<K> key)
+const noexcept {
     /* Calculate the key hash */
     const S hash = H(key) % _capacity;
 
     /* Try to get the node from the linked list */
     for (const Node& node : _buckets[hash])
-        if (equal(node.key, key))
+        if (E(node.key, key))
             return &node.element;
 
     /* If there is NOT an element in the linked list, return nullptr */
     return nullptr;
 }
 
-template <typename K, typename T, typename S, hash_func<K> H>
-bool Dictionary<K, T, S, H>::Has(optimal_param<K> key) const noexcept {
+template <typename K, typename T, typename S,
+dictionary_hash_func<K> H,
+dictionary_equal<K> E>
+bool Dictionary<K, T, S, H, E>::Has(dictionary_optimal_param<K> key)
+const noexcept {
     /* Calculate the key hash */
     const S hash = H(key) % _capacity;
 
     /* Try to get the node from the linked list */
     for (const Node& node : _buckets[hash])
-        if (equal(node.key, key))
+        if (E(node.key, key))
             return true;
 
     /* If there is NOT an element in the linked list, return false */
     return false;
 }
 
-template <typename K, typename T, typename S, hash_func<K> H>
-bool Dictionary<K, T, S, H>::Delete(optimal_param<K> key) noexcept {
+template <typename K, typename T, typename S,
+dictionary_hash_func<K> H,
+dictionary_equal<K> E>
+bool Dictionary<K, T, S, H, E>::Delete(dictionary_optimal_param<K> key)
+noexcept {
     /* Calculate the key hash */
     const S hash = H(key) % _capacity;
 
@@ -243,7 +269,7 @@ bool Dictionary<K, T, S, H>::Delete(optimal_param<K> key) noexcept {
     S index = 0;
     bool has_element = false;
     for (const Node& node : _buckets[hash]) {
-        if (equal(node.key, key)) {
+        if (E(node.key, key)) {
             has_element = true;
             break;
         }
@@ -258,8 +284,10 @@ bool Dictionary<K, T, S, H>::Delete(optimal_param<K> key) noexcept {
     return true;
 }
 
-template <typename K, typename T, typename S, hash_func<K> H>
-Dictionary<K, T, S, H>::Iterator Dictionary<K, T, S, H>::begin()
+template <typename K, typename T, typename S,
+dictionary_hash_func<K> H,
+dictionary_equal<K> E>
+Dictionary<K, T, S, H, E>::Iterator Dictionary<K, T, S, H, E>::begin()
 const noexcept {
     /* Iterate over all buckets */
     for (S i = 0; i < _capacity; ++i)
@@ -272,16 +300,21 @@ const noexcept {
     return end();
 }
 
-template <typename K, typename T, typename S, hash_func<K> H>
-Dictionary<K, T, S, H>::Iterator Dictionary<K, T, S, H>::end() const noexcept {
+template <typename K, typename T, typename S,
+dictionary_hash_func<K> H,
+dictionary_equal<K> E>
+Dictionary<K, T, S, H, E>::Iterator Dictionary<K, T, S, H, E>::end()
+const noexcept {
     /* Construct an iterator representing the end position:
      * index == capacity and internal list iterator == nullptr */
     return Iterator(_capacity, _capacity, _buckets,
                     typename LinkedList<Node>::Iterator(nullptr));
 }
 
-template <typename K, typename T, typename S, hash_func<K> H>
-Dictionary<K, T, S, H>::Iterator::Iterator(
+template <typename K, typename T, typename S,
+dictionary_hash_func<K> H,
+dictionary_equal<K> E>
+Dictionary<K, T, S, H, E>::Iterator::Iterator(
     const S index,
     const S capacity,
     const LinkedList<Node>* const lists,
@@ -289,9 +322,11 @@ Dictionary<K, T, S, H>::Iterator::Iterator(
 ) noexcept : _index(index), _capacity(capacity),
              _buckets(lists), _iterator(iterator) { }
 
-template <typename K, typename T, typename S, hash_func<K> H>
-bool Dictionary<K, T, S, H>::
-Iterator::operator!=(const Iterator& other) const noexcept {
+template <typename K, typename T, typename S,
+dictionary_hash_func<K> H,
+dictionary_equal<K> E>
+bool Dictionary<K, T, S, H, E>::Iterator::operator!=(const Iterator& other)
+const noexcept {
     /* If both iterators are "end" iterators, they are equal */
     if (_index == _capacity && other._index == other._capacity) return false;
 
@@ -302,18 +337,25 @@ Iterator::operator!=(const Iterator& other) const noexcept {
     return _iterator != other._iterator;
 }
 
-template <typename K, typename T, typename S, hash_func<K> H>
-Dictionary<K, T, S, H>::Node&
-Dictionary<K, T, S, H>::Iterator::operator*() noexcept { return *_iterator; }
+template <typename K, typename T, typename S,
+dictionary_hash_func<K> H,
+dictionary_equal<K> E>
+Dictionary<K, T, S, H, E>::Node&
+Dictionary<K, T, S, H, E>::Iterator::operator*()
+noexcept { return *_iterator; }
 
-template <typename K, typename T, typename S, hash_func<K> H>
-const Dictionary<K, T, S, H>::Node&
-Dictionary<K, T, S, H>::Iterator::operator*()
+template <typename K, typename T, typename S,
+dictionary_hash_func<K> H,
+dictionary_equal<K> E>
+const Dictionary<K, T, S, H, E>::Node&
+Dictionary<K, T, S, H, E>::Iterator::operator*()
 const noexcept { return *_iterator; }
 
-template <typename K, typename T, typename S, hash_func<K> H>
-Dictionary<K, T, S, H>::Iterator&
-Dictionary<K, T, S, H>::Iterator::operator++() noexcept {
+template <typename K, typename T, typename S,
+dictionary_hash_func<K> H,
+dictionary_equal<K> E>
+Dictionary<K, T, S, H, E>::Iterator&
+Dictionary<K, T, S, H, E>::Iterator::operator++() noexcept {
     /* If iterator is already at end(), do nothing */
     if (_index == _capacity) return *this;
 

@@ -46,7 +46,7 @@ static inline unsigned long calculate(const unsigned char* element,
 }
 
 template <std::integral T>
-inline unsigned long hash(T element) { return (unsigned long)element; }
+inline unsigned long hash(const T element) { return (unsigned long)element; }
 
 template <typename T>
 inline unsigned long hash(const T& element) noexcept {
@@ -71,7 +71,7 @@ inline unsigned long hash(const sockaddr_in& element) noexcept {
 
 template <>
 inline unsigned long hash(const String& element) noexcept {
-    return ::hash((const char*)element);
+    return ::hash(element.CStr());
 }
 
 template <>
