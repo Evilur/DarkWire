@@ -7,8 +7,11 @@
 #include <sodium.h>
 #include <type_traits>
 
-inline static unsigned long calculate(const unsigned char* element,
-                               unsigned long size) noexcept;
+static inline unsigned long calculate(const unsigned char* element,
+                                      unsigned long size) noexcept;
+
+template <std::integral T>
+inline unsigned long hash(T element);
 
 template <typename T>
 inline unsigned long hash(const T& element) noexcept;
@@ -38,14 +41,18 @@ static inline unsigned long calculate(const unsigned char* element,
     return hash;
 }
 
+template <std::integral T>
+inline unsigned long hash(T element) { return (unsigned long)element; }
+
 template <typename T>
 inline unsigned long hash(const T& element) noexcept {
     /* Get the byte array from the element and calc the hash */
     if constexpr (std::is_pointer_v<T>)
         return hash(*element);
-    else
+    else if constexpr (!std::is_integral_v<T>)
         return calculate((const unsigned char*)(void*)&element,
                          sizeof(element));
+    else return (unsigned long)element;
 }
 
 template <>

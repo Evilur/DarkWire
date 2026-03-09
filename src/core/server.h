@@ -51,16 +51,16 @@ private:
         static inline LinkedList<const unsigned char*>* public_keys = nullptr;
         static inline std::mutex public_keys_mutex;
         static inline Dictionary<unsigned int,
-        Details,
-        unsigned int>* details = nullptr;
+                                 Details,
+                                 unsigned int>* details = nullptr;
         static inline std::mutex details_mutex;
         static inline Dictionary<KeyBuffer,
-        unsigned long,
-        unsigned int>* timestamps = nullptr;
+                                 unsigned long,
+                                 unsigned int>* timestamps = nullptr;
         static inline std::mutex timestamps_mutex;
         static inline Dictionary<sockaddr_in,
-        UniqPtr<unsigned char[]>,
-        unsigned int>* keys = nullptr;
+                                 UniqPtr<unsigned char[]>,
+                                 unsigned int>* keys = nullptr;
         static inline std::mutex keys_mutex;
     };
 
@@ -103,16 +103,16 @@ inline void Server::Init() {
     /* Allocate the memory for dictionaries */
     std::lock_guard details_lock(Peers::details_mutex);
     Peers::details = new Dictionary<unsigned int,
-        Peers::Details,
-        unsigned int>(Peers::number);
+                                    Peers::Details,
+                                    unsigned int>(Peers::number);
     std::lock_guard timestamps_lock(Peers::timestamps_mutex);
     Peers::timestamps = new Dictionary<KeyBuffer,
-        unsigned long,
-        unsigned int>(Peers::number);
+                                       unsigned long,
+                                       unsigned int>(Peers::number);
     std::lock_guard keys_lock(Peers::keys_mutex);
     Peers::keys = new Dictionary<sockaddr_in,
-        UniqPtr<unsigned char[]>,
-        unsigned int>(Peers::number);
+                                 UniqPtr<unsigned char[]>,
+                                 unsigned int>(Peers::number);
 
     /* Fill timestamps dictionary with zeros */
     std::lock_guard public_keys_lock(Peers::public_keys_mutex);

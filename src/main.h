@@ -40,8 +40,4 @@ static inline void on_terminate();
 
 [[nodiscard]] static inline int run_server();
 
-static inline void run_handle_packages_loop(
-    void (*handle_package)(const char* const, const int, const sockaddr_in&)
-);
-
 void calc_net();
