@@ -32,10 +32,6 @@ public:
 
     bool PopTail() noexcept;
 
-    bool RemoveFirst(const T& element) noexcept;
-
-    unsigned int Remove(const T& element) noexcept;
-
     unsigned int Remove(unsigned int index, unsigned int number = 1) noexcept;
 
     T* Get(unsigned int index) noexcept;
@@ -152,39 +148,6 @@ unsigned int LinkedList<T>::Pop(const unsigned int number) noexcept {
     }
     if (_head == nullptr) _tail = nullptr;
     return number;
-}
-
-template <typename T>
-bool LinkedList<T>::RemoveFirst(const T& element) noexcept {
-    /* Go through all the elements while there is no one equal */
-    Node* node_ptr = _head;
-    while (node_ptr != nullptr) {
-        if (equal(node_ptr->value, element)) {
-            CutNode(node_ptr);
-            return true;
-        }
-        node_ptr = node_ptr->next;
-    }
-
-    /* If there is no such an element */
-    return false;
-}
-
-template <typename T>
-unsigned int LinkedList<T>::Remove(const T& element) noexcept {
-    /* Go through all the elements and delete equal */
-    Node* node_ptr = _head;
-    unsigned int result = 0;
-    while (node_ptr != nullptr) {
-        if (equal(node_ptr->value, element)) {
-            CutNode(node_ptr);
-            ++result;
-        }
-        node_ptr = node_ptr->next;
-    }
-
-    /* If there is no such an element */
-    return result;
 }
 
 template <typename T>
