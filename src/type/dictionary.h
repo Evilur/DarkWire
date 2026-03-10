@@ -161,17 +161,20 @@ private:
 template <typename K, typename T, typename S,
 dictionary_hash_func<K> H,
 dictionary_equal<K> E>
+FORCE_INLINE
 Dictionary<K, T, S, H, E>::Dictionary(const S capacity) noexcept :
         _buckets(new LinkedList<Node>[capacity]), _capacity(capacity) { }
 
 template <typename K, typename T, typename S,
 dictionary_hash_func<K> H,
 dictionary_equal<K> E>
+FORCE_INLINE
 Dictionary<K, T, S, H, E>::~Dictionary() noexcept { delete[] _buckets; }
 
 template <typename K, typename T, typename S,
 dictionary_hash_func<K> H,
 dictionary_equal<K> E>
+FORCE_INLINE
 bool Dictionary<K, T, S, H, E>::Put(dictionary_optimal_param<K> key,
                                  const T& element) noexcept {
     /* Calculate the key hash */
@@ -191,8 +194,9 @@ bool Dictionary<K, T, S, H, E>::Put(dictionary_optimal_param<K> key,
 template <typename K, typename T, typename S,
 dictionary_hash_func<K> H,
 dictionary_equal<K> E>
+FORCE_INLINE
 bool Dictionary<K, T, S, H, E>::Put(dictionary_optimal_param<K> key,
-                                 T&& element) noexcept {
+                                    T&& element) noexcept {
     /* Calculate the key hash */
     const S hash = H(key) % _capacity;
 
@@ -210,6 +214,7 @@ bool Dictionary<K, T, S, H, E>::Put(dictionary_optimal_param<K> key,
 template <typename K, typename T, typename S,
 dictionary_hash_func<K> H,
 dictionary_equal<K> E>
+FORCE_INLINE
 T* Dictionary<K, T, S, H, E>::Get(dictionary_optimal_param<K> key) noexcept {
     /* Calculate the key hash */
     const S hash = H(key) % _capacity;
@@ -226,6 +231,7 @@ T* Dictionary<K, T, S, H, E>::Get(dictionary_optimal_param<K> key) noexcept {
 template <typename K, typename T, typename S,
 dictionary_hash_func<K> H,
 dictionary_equal<K> E>
+FORCE_INLINE
 const T* Dictionary<K, T, S, H, E>::Get(dictionary_optimal_param<K> key)
 const noexcept {
     /* Calculate the key hash */
@@ -243,6 +249,7 @@ const noexcept {
 template <typename K, typename T, typename S,
 dictionary_hash_func<K> H,
 dictionary_equal<K> E>
+FORCE_INLINE
 bool Dictionary<K, T, S, H, E>::Has(dictionary_optimal_param<K> key)
 const noexcept {
     /* Calculate the key hash */
@@ -260,6 +267,7 @@ const noexcept {
 template <typename K, typename T, typename S,
 dictionary_hash_func<K> H,
 dictionary_equal<K> E>
+FORCE_INLINE
 bool Dictionary<K, T, S, H, E>::Delete(dictionary_optimal_param<K> key)
 noexcept {
     /* Calculate the key hash */
@@ -287,6 +295,7 @@ noexcept {
 template <typename K, typename T, typename S,
 dictionary_hash_func<K> H,
 dictionary_equal<K> E>
+FORCE_INLINE
 Dictionary<K, T, S, H, E>::Iterator Dictionary<K, T, S, H, E>::begin()
 const noexcept {
     /* Iterate over all buckets */
@@ -303,6 +312,7 @@ const noexcept {
 template <typename K, typename T, typename S,
 dictionary_hash_func<K> H,
 dictionary_equal<K> E>
+FORCE_INLINE
 Dictionary<K, T, S, H, E>::Iterator Dictionary<K, T, S, H, E>::end()
 const noexcept {
     /* Construct an iterator representing the end position:
@@ -314,7 +324,7 @@ const noexcept {
 template <typename K, typename T, typename S,
 dictionary_hash_func<K> H,
 dictionary_equal<K> E>
-Dictionary<K, T, S, H, E>::Iterator::Iterator(
+FORCE_INLINE Dictionary<K, T, S, H, E>::Iterator::Iterator(
     const S index,
     const S capacity,
     const LinkedList<Node>* const lists,
@@ -325,6 +335,7 @@ Dictionary<K, T, S, H, E>::Iterator::Iterator(
 template <typename K, typename T, typename S,
 dictionary_hash_func<K> H,
 dictionary_equal<K> E>
+FORCE_INLINE
 bool Dictionary<K, T, S, H, E>::Iterator::operator!=(const Iterator& other)
 const noexcept {
     /* If both iterators are "end" iterators, they are equal */
@@ -340,21 +351,21 @@ const noexcept {
 template <typename K, typename T, typename S,
 dictionary_hash_func<K> H,
 dictionary_equal<K> E>
-Dictionary<K, T, S, H, E>::Node&
+FORCE_INLINE Dictionary<K, T, S, H, E>::Node&
 Dictionary<K, T, S, H, E>::Iterator::operator*()
 noexcept { return *_iterator; }
 
 template <typename K, typename T, typename S,
 dictionary_hash_func<K> H,
 dictionary_equal<K> E>
-const Dictionary<K, T, S, H, E>::Node&
+FORCE_INLINE const Dictionary<K, T, S, H, E>::Node&
 Dictionary<K, T, S, H, E>::Iterator::operator*()
 const noexcept { return *_iterator; }
 
 template <typename K, typename T, typename S,
 dictionary_hash_func<K> H,
 dictionary_equal<K> E>
-Dictionary<K, T, S, H, E>::Iterator&
+FORCE_INLINE Dictionary<K, T, S, H, E>::Iterator&
 Dictionary<K, T, S, H, E>::Iterator::operator++() noexcept {
     /* If iterator is already at end(), do nothing */
     if (_index == _capacity) return *this;

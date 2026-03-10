@@ -1,6 +1,7 @@
 #pragma once
 
 #include "util/class.h"
+#include "util/macro.h"
 
 #include <cstring>
 #include <sodium.h>
@@ -28,7 +29,7 @@ private:
     unsigned char _pk[crypto_scalarmult_BYTES];
 };
 
-inline Keys::Keys() noexcept {
+FORCE_INLINE Keys::Keys() noexcept {
     /* Generate the random secret key */
     randombytes_buf(_sk, crypto_scalarmult_BYTES);
 
@@ -36,7 +37,7 @@ inline Keys::Keys() noexcept {
     crypto_scalarmult_base(_pk, _sk);
 }
 
-inline Keys::Keys(const char* const base64_secret_key) noexcept {
+FORCE_INLINE Keys::Keys(const char* const base64_secret_key) noexcept {
     /* Decode the base64 */
     sodium_base642bin(_sk, crypto_scalarmult_BYTES,
                       base64_secret_key, strlen(base64_secret_key),
@@ -47,6 +48,6 @@ inline Keys::Keys(const char* const base64_secret_key) noexcept {
     crypto_scalarmult_base(_pk, _sk);
 }
 
-inline const unsigned char* Keys::Secret() const noexcept { return _sk; }
+FORCE_INLINE const unsigned char* Keys::Secret() const noexcept { return _sk; }
 
-inline const unsigned char* Keys::Public() const noexcept { return _pk; }
+FORCE_INLINE const unsigned char* Keys::Public() const noexcept { return _pk; }

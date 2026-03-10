@@ -61,7 +61,7 @@ public:
     static sockaddr_in GetAddress(const char* str);
 };
 
-inline UDPSocket::UDPSocket() {
+FORCE_INLINE UDPSocket::UDPSocket() {
     #ifdef _WIN64
     WSADATA wsa;
     if (WSAStartup(MAKEWORD(2,2), &wsa) != 0) {
@@ -87,7 +87,7 @@ inline UDPSocket::UDPSocket() {
     }
 }
 
-inline UDPSocket::~UDPSocket() noexcept {
+FORCE_INLINE UDPSocket::~UDPSocket() noexcept {
     if (_socket_fd == -1) return;
     #ifdef _WIN64
     closesocket(_socket_fd);
@@ -97,7 +97,7 @@ inline UDPSocket::~UDPSocket() noexcept {
     #endif
 }
 
-inline void UDPSocket::Bind(const sockaddr_in& address) const {
+FORCE_INLINE void UDPSocket::Bind(const sockaddr_in& address) const {
     /* Bind the address to the socket */
     if (bind(_socket_fd, (const sockaddr*)&address, sizeof(address)) == -1) {
         ERROR_LOG("Can't bind the address");
@@ -123,7 +123,7 @@ inline void UDPSocket::Bind(const sockaddr_in& address) const {
 #endif
 }
 
-inline void UDPSocket::Connect(const sockaddr_in& address) const {
+FORCE_INLINE void UDPSocket::Connect(const sockaddr_in& address) const {
     /* Connect to the address */
     if (connect(_socket_fd, (const sockaddr*)&address, sizeof(address)) ==
         -1) {
@@ -138,7 +138,7 @@ inline void UDPSocket::Connect(const sockaddr_in& address) const {
              ntohs(address.sin_port));
 }
 
-inline int UDPSocket::Receive(char* buffer, sockaddr_in* from)
+FORCE_INLINE int UDPSocket::Receive(char* buffer, sockaddr_in* from)
 const noexcept {
     /* Receive the data */
     socklen_t from_len = sizeof(sockaddr_in);
@@ -159,7 +159,7 @@ const noexcept {
     return result;
 }
 
-inline int UDPSocket::Receive(char* buffer)
+FORCE_INLINE int UDPSocket::Receive(char* buffer)
 const noexcept {
     /* Receive the data */
     const int result = (int)recv(_socket_fd, buffer, MTU, 0);
@@ -181,7 +181,9 @@ const noexcept {
     return result;
 }
 
-inline void UDPSocket::Send(const char* const buffer, const long buffer_size,
+FORCE_INLINE
+void UDPSocket::Send(const char* const buffer,
+                     const long buffer_size,
                      const sockaddr_in& address) const noexcept {
     /* Send the data */
     const long result = sendto(_socket_fd, buffer,
@@ -203,7 +205,8 @@ inline void UDPSocket::Send(const char* const buffer, const long buffer_size,
 #endif
 }
 
-inline void UDPSocket::Send(const char* const buffer, const long buffer_size)
+FORCE_INLINE
+void UDPSocket::Send(const char* const buffer, const long buffer_size)
 const noexcept {
     /* Send the data */
     const long result  = send(_socket_fd, buffer,
@@ -228,8 +231,9 @@ const noexcept {
 #endif
 }
 
-inline void UDPSocket::SetOption(const int optname, const void* const optval,
-                                 const socklen_t optlen) const noexcept {
+FORCE_INLINE
+void UDPSocket::SetOption(const int optname, const void* const optval,
+                          const socklen_t optlen) const noexcept {
 #ifdef _WIN64
     if (setsockopt(_socket_fd, SOL_SOCKET,
                    optname, (const char*)optval, optlen) == -1)
@@ -239,12 +243,12 @@ inline void UDPSocket::SetOption(const int optname, const void* const optval,
         WARN_LOG("Can't set socket option");
 }
 
-inline void UDPSocket::Close() noexcept {
+FORCE_INLINE void UDPSocket::Close() noexcept {
     close(_socket_fd);
     _socket_fd = -1;
 }
 
-inline sockaddr_in UDPSocket::GetAddress(const char* const str) {
+FORCE_INLINE sockaddr_in UDPSocket::GetAddress(const char* const str) {
     /* Store the result */
     sockaddr_in result { AF_INET };
 

@@ -66,7 +66,7 @@ int main(const int argc, const char* const* const argv) {
     return run_server();
 }
 
-static inline void on_terminate() {
+static void on_terminate() {
     /* Get the current exception */
     std::exception_ptr exception = std::current_exception();
 
@@ -83,7 +83,7 @@ static inline void on_terminate() {
     } catch (...) { FATAL_LOG("Unhandled unknown exception"); }
 }
 
-static inline int print_help() {
+static int print_help() {
     constexpr const char* const help_message =
         "NAME:\n"
         "\tdw - DarkWire\n\n"
@@ -105,7 +105,7 @@ static inline int print_help() {
     return 0;
 }
 
-static inline int genkey() {
+static int genkey() {
     /* Create the keys pair */
     const Keys keys;
 
@@ -137,7 +137,7 @@ static inline int genkey() {
     return 0;
 }
 
-static inline int pubkey() {
+static int pubkey() {
     /* Create a buffer for the base64 key representations */
     const unsigned long base64_size = sodium_base64_encoded_len(
         crypto_scalarmult_BYTES,
@@ -168,7 +168,7 @@ static inline int pubkey() {
     return 0;
 }
 
-static inline int handle_config(const char* const name) {
+static int handle_config(const char* const name) {
     /* Set the suffix */
     constexpr const char suffix[] = ".conf";
 
@@ -339,7 +339,7 @@ static inline int handle_config(const char* const name) {
     return 0;
 }
 
-static inline int run_client() {
+static int run_client() {
     /* Init the client */
     Client::Init();
 
@@ -381,7 +381,7 @@ static inline int run_client() {
     return -1;
 }
 
-static inline int run_server() {
+static int run_server() {
     /* Up the interface */
     tun->Up();
 
@@ -419,7 +419,7 @@ static inline int run_server() {
     return -1;
 }
 
-inline void calc_net() {
+void calc_net() {
     binmask.SetHostb((netmask == 0) ? 0x0U : (~0U << (32U - netmask)));
     network_prefix.SetHostb(local_ip.Hostb() & binmask.Hostb());
     broadcast.SetHostb(network_prefix.Hostb() | ~binmask.Hostb());

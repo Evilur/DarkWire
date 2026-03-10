@@ -2,6 +2,7 @@
 
 #include "package_type.h"
 #include "socket/udp_socket.h"
+#include "util/macro.h"
 #include "util/nonce.h"
 
 #include <cstring>
@@ -25,17 +26,17 @@ struct TransferData final {
     [[nodiscard]] unsigned int Size(int buffer_size) const noexcept;
 } __attribute__((packed));
 
-inline TransferData::TransferData(Nonce& nonce,
-                                  const unsigned int destination_ip,
-                                  const char* const buffer,
-                                  const  int buffer_size) noexcept {
+FORCE_INLINE TransferData::TransferData(Nonce& nonce,
+                                        const unsigned int destination_ip,
+                                        const char* const buffer,
+                                        const  int buffer_size) noexcept {
     header.type = TRANSFER_DATA;
     nonce.Copy(header.nonce);
     header.destination_ip = destination_ip;
     memcpy(payload.buffer, buffer, (unsigned long)buffer_size);
 }
 
-inline unsigned int TransferData::Size(const int buffer_size)
+FORCE_INLINE unsigned int TransferData::Size(const int buffer_size)
 const noexcept {
     return sizeof(header) +
            buffer_size +

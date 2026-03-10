@@ -27,8 +27,8 @@ struct HandshakeRequest final {
     explicit HandshakeRequest(const unsigned char* epk, Nonce& nonce) noexcept;
 } __attribute__((packed));
 
-inline HandshakeRequest::HandshakeRequest(const unsigned char* const epk,
-                                          Nonce& nonce) noexcept {
+FORCE_INLINE HandshakeRequest::HandshakeRequest(const unsigned char* const epk,
+                                                Nonce& nonce) noexcept {
     /* Set the type */
     header.type = HANDSHAKE_REQUEST;
 

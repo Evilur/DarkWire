@@ -1,6 +1,7 @@
 #pragma once
 
 #include "util/class.h"
+#include "util/macro.h"
 
 #include <cstring>
 #include <exception>
@@ -23,9 +24,10 @@ private:
     char* _message = nullptr;
 };
 
-inline RuntimeError::~RuntimeError() noexcept { delete[] _message; }
+RuntimeError::~RuntimeError() noexcept { delete[] _message; }
 
-inline RuntimeError::RuntimeError(const char* const message) :
+FORCE_INLINE RuntimeError::RuntimeError(const char* const message) :
     _message(new char[strlen(message) + 1]) { strcpy(_message, message); }
 
-inline const char* RuntimeError::what() const noexcept { return _message; }
+FORCE_INLINE const char* RuntimeError::what()
+const noexcept { return _message; }

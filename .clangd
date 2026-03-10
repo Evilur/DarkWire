@@ -41,6 +41,7 @@ Diagnostics:
       - '*'
     Remove:
       - altera-unroll-loops
+      - google-objc-function-naming
       - bugprone-casting-through-void
       - bugprone-easily-swappable-parameters
       - cppcoreguidelines-avoid-c-arrays

@@ -1,14 +1,16 @@
 #pragma once
 
+#include "util/macro.h"
+
 #include <sodium.h>
 
-inline void hkdf(unsigned char* derived_key,
+FORCE_INLINE void hkdf(unsigned char* derived_key,
                  const unsigned char* salt,
-                 const unsigned char* shared);
+                 const unsigned char* shared) noexcept;
 
-inline void hkdf(unsigned char* derived_key,
+FORCE_INLINE void hkdf(unsigned char* derived_key,
                  const unsigned char* const salt,
-                 const unsigned char* const shared) {
+                 const unsigned char* const shared) noexcept {
     /* Extract: HMAC(salt/nullptr, shared) */
     unsigned char prk[crypto_auth_hmacsha256_BYTES];
     crypto_auth_hmacsha256_state state;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "util/class.h"
+#include "util/macro.h"
 
 #include <cstring>
 #include <sodium.h>
@@ -27,15 +28,18 @@ private:
     const unsigned char* _ptr = nullptr;
 };
 
-inline KeyBuffer::KeyBuffer(const unsigned char* const ptr)
+FORCE_INLINE KeyBuffer::KeyBuffer(const unsigned char* const ptr)
 noexcept : _ptr(ptr) { }
 
-inline bool KeyBuffer::operator==(const KeyBuffer& other) const noexcept {
+FORCE_INLINE bool KeyBuffer::operator==(const KeyBuffer& other)
+const noexcept {
     return memcmp(_ptr, other._ptr, crypto_scalarmult_BYTES) == 0;
 }
 
-inline bool KeyBuffer::operator!=(const KeyBuffer& other) const noexcept {
+FORCE_INLINE bool KeyBuffer::operator!=(const KeyBuffer& other)
+const noexcept {
     return memcmp(_ptr, other._ptr, crypto_scalarmult_BYTES) != 0;
 }
 
-inline const unsigned char* KeyBuffer::Get() const noexcept { return _ptr; }
+FORCE_INLINE const unsigned char* KeyBuffer::Get()
+const noexcept { return _ptr; }

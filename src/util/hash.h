@@ -2,34 +2,35 @@
 
 #include "type/string.h"
 #include "core/key_buffer.h"
+#include "util/macro.h"
 
 #include <cstring>
 #include <netinet/in.h>
 #include <sodium.h>
 #include <type_traits>
 
-static inline unsigned long calculate(const unsigned char* element,
+static FORCE_INLINE unsigned long calculate(const unsigned char* element,
                                       unsigned long size) noexcept;
 
 template <std::integral T>
-inline unsigned long hash(T element);
+FORCE_INLINE unsigned long hash(T element);
 
 template <typename T>
-inline unsigned long hash(const T& element) noexcept;
+FORCE_INLINE unsigned long hash(const T& element) noexcept;
 
 template <>
-inline unsigned long hash(const char* const& element) noexcept;
+FORCE_INLINE unsigned long hash(const char* const& element) noexcept;
 
 template <>
-inline unsigned long hash(const sockaddr_in& element) noexcept;
+FORCE_INLINE unsigned long hash(const sockaddr_in& element) noexcept;
 
 template <>
-inline unsigned long hash(const String& element) noexcept;
+FORCE_INLINE unsigned long hash(const String& element) noexcept;
 
 template <>
-inline unsigned long hash(const KeyBuffer& element) noexcept;
+FORCE_INLINE unsigned long hash(const KeyBuffer& element) noexcept;
 
-static inline unsigned long calculate(const unsigned char* element,
+static unsigned long calculate(const unsigned char* element,
                                       const unsigned long size) noexcept {
     /* The variable to store the hash (751 - random prime number) */
     unsigned long hash = 751;
@@ -46,10 +47,11 @@ static inline unsigned long calculate(const unsigned char* element,
 }
 
 template <std::integral T>
-inline unsigned long hash(const T element) { return (unsigned long)element; }
+FORCE_INLINE unsigned long hash(const T element)
+{ return (unsigned long)element; }
 
 template <typename T>
-inline unsigned long hash(const T& element) noexcept {
+FORCE_INLINE unsigned long hash(const T& element) noexcept {
     /* Get the byte array from the element and calc the hash */
     if constexpr (std::is_pointer_v<T>)
         return hash(*element);
@@ -60,21 +62,21 @@ inline unsigned long hash(const T& element) noexcept {
 }
 
 template <>
-inline unsigned long hash(const char* const& element) noexcept {
+FORCE_INLINE unsigned long hash(const char* const& element) noexcept {
     return calculate((const unsigned char*)element, strlen(element));
 }
 
 template <>
-inline unsigned long hash(const sockaddr_in& element) noexcept {
+FORCE_INLINE unsigned long hash(const sockaddr_in& element) noexcept {
     return element.sin_addr.s_addr + element.sin_port;
 }
 
 template <>
-inline unsigned long hash(const String& element) noexcept {
+FORCE_INLINE unsigned long hash(const String& element) noexcept {
     return ::hash(element.CStr());
 }
 
 template <>
-inline unsigned long hash(const KeyBuffer& element) noexcept {
+FORCE_INLINE unsigned long hash(const KeyBuffer& element) noexcept {
     return calculate(element.Get(), crypto_scalarmult_BYTES);
 }

@@ -28,16 +28,16 @@ inline const UDPSocket main_socket;
 
 static inline void on_terminate();
 
-[[nodiscard]] static inline int print_help();
+[[nodiscard]] static int print_help();
 
-[[nodiscard]] static inline int genkey();
+[[nodiscard]] static int genkey();
 
-[[nodiscard]] static inline int pubkey();
+[[nodiscard]] static int pubkey();
 
-[[nodiscard]] static inline int handle_config(const char* name);
+[[nodiscard]] static int handle_config(const char* name);
 
-[[nodiscard]] static inline int run_client();
+[[nodiscard]] static int run_client();
 
-[[nodiscard]] static inline int run_server();
+[[nodiscard]] static int run_server();
 
 void calc_net();

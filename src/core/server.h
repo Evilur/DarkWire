@@ -28,15 +28,15 @@ class Server final {
 public:
     PREVENT_INSTANTIATION(Server);
 
-    inline static void SavePeer(const unsigned char* public_key);
+    static void SavePeer(const unsigned char* public_key);
 
-    inline static void Init();
+    static void Init();
 
-    inline static void RunHandlePackagesLoop() noexcept;
+    static void RunHandlePackagesLoop() noexcept;
 
-    inline static void HandleTunPackage(const char* buffer,
-                                        int buffer_size,
-                                        unsigned int destination_netb) noexcept;
+    static void HandleTunPackage(const char* buffer,
+                                 int buffer_size,
+                                 unsigned int destination_netb) noexcept;
 
 private:
     struct Peers {
@@ -64,20 +64,20 @@ private:
         static inline std::mutex keys_mutex;
     };
 
-    inline static void HandleHandshakeRequest(
+    static void HandleHandshakeRequest(
         HandshakeRequest* package,
         unsigned int package_size,
         sockaddr_in from
     );
 
-    inline static void HandleTransferData(
+    static void HandleTransferData(
         TransferData* package,
         unsigned int package_size,
         sockaddr_in from
     ) noexcept;
 };
 
-inline void Server::SavePeer(const unsigned char* const public_key) {
+FORCE_INLINE void Server::SavePeer(const unsigned char* const public_key) {
     /* If the peers list isn't defined yet */
     std::lock_guard public_keys_lock(Peers::public_keys_mutex);
     if (Peers::public_keys == nullptr) {
@@ -93,7 +93,7 @@ inline void Server::SavePeer(const unsigned char* const public_key) {
     ++Peers::number;
 }
 
-inline void Server::Init() {
+FORCE_INLINE void Server::Init() {
     /* Increase send and receive buffers */
     const int rcvbuf = 32 * 1024 * 1024 * (int)Peers::number;
     const int sndbuf = 32 * 1024 * 1024 * (int)Peers::number;
@@ -123,7 +123,7 @@ inline void Server::Init() {
     Peers::details->Put(local_ip.Netb(), {});
 }
 
-inline void Server::HandleTunPackage(const char* const buffer,
+FORCE_INLINE void Server::HandleTunPackage(const char* const buffer,
                                      const int buffer_size,
                                      const unsigned int destination_netb)
 noexcept {
@@ -158,7 +158,7 @@ noexcept {
                      details->endpoint);
 }
 
-inline void Server::RunHandlePackagesLoop() noexcept {
+FORCE_INLINE void Server::RunHandlePackagesLoop() noexcept {
     /* Allocate the memory for the buffer */
     char buffer[UDPSocket::MTU];
 
@@ -193,7 +193,7 @@ inline void Server::RunHandlePackagesLoop() noexcept {
     }
 }
 
-inline void Server::HandleHandshakeRequest(
+FORCE_INLINE void Server::HandleHandshakeRequest(
     HandshakeRequest* const package,
     const unsigned int package_size,
     const sockaddr_in from
@@ -410,7 +410,7 @@ inline void Server::HandleHandshakeRequest(
     Peers::keys->Put(from, std::move(chain_key));
 }
 
-inline void Server::HandleTransferData(
+FORCE_INLINE void Server::HandleTransferData(
     TransferData* const package,
     const unsigned int package_size,
     const sockaddr_in from

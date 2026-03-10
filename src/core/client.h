@@ -31,17 +31,17 @@ class Client final {
 public:
     PREVENT_INSTANTIATION(Client);
 
-    inline static void Init();
+    static void Init();
 
-    inline static void RunHandshakeLoop();
+    static void RunHandshakeLoop();
 
-    inline static void RunHandlePackagesLoop() noexcept;
+    static void RunHandlePackagesLoop() noexcept;
 
-    inline static void RunKeepAliveLoop() noexcept;
+    static void RunKeepAliveLoop() noexcept;
 
-    inline static void HandleTunPackage(const char* buffer,
-                                        int buffer_size,
-                                        unsigned int destination_netb) noexcept;
+    static void HandleTunPackage(const char* buffer,
+                                 int buffer_size,
+                                 unsigned int destination_netb) noexcept;
 
 private:
     struct Server {
@@ -57,13 +57,13 @@ private:
     static inline unsigned long _next_handshake_timestamp =
         (unsigned long)std::time(nullptr);
 
-    inline static void HandleHandshakeResponse(
+    static void HandleHandshakeResponse(
         HandshakeResponse* package,
         unsigned int package_size,
         sockaddr_in from
     ) noexcept;
 
-    inline static void HandleTransferData(
+    static void HandleTransferData(
         TransferData* package,
         unsigned int package_size,
         sockaddr_in from
@@ -89,7 +89,7 @@ private:
     };
 };
 
-inline void Client::Init() {
+FORCE_INLINE void Client::Init() {
     /* Increase send and receive buffers */
     constexpr int RCVBUF = 32 * 1024 * 1024;
     constexpr int SNDBUF = 32 * 1024 * 1024;
@@ -125,7 +125,7 @@ inline void Client::Init() {
     Peers::keys_mutex.unlock();
 }
 
-inline void Client::RunHandshakeLoop() {
+FORCE_INLINE void Client::RunHandshakeLoop() {
     /* Send a handhake request */
     for (;;) {
         /* Check the timestamp */
@@ -188,7 +188,7 @@ inline void Client::RunHandshakeLoop() {
     }
 }
 
-inline void Client::RunHandlePackagesLoop() noexcept {
+FORCE_INLINE void Client::RunHandlePackagesLoop() noexcept {
     /* Allocate the memory for the buffer */
     char buffer[UDPSocket::MTU];
 
@@ -224,7 +224,7 @@ inline void Client::RunHandlePackagesLoop() noexcept {
     }
 }
 
-inline void Client::RunKeepAliveLoop() noexcept {
+FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
     const KeepAlive keepalive_package;
 
     /* Send keep-alive package every 30 seconds */
@@ -237,7 +237,7 @@ inline void Client::RunKeepAliveLoop() noexcept {
     }
 }
 
-inline void Client::HandleTunPackage(const char* const buffer,
+FORCE_INLINE void Client::HandleTunPackage(const char* const buffer,
                                      const int buffer_size,
                                      unsigned int destination_netb)
 noexcept {
@@ -294,7 +294,7 @@ noexcept {
                      endpoint);
 }
 
-inline void Client::HandleHandshakeResponse(
+FORCE_INLINE void Client::HandleHandshakeResponse(
     HandshakeResponse* const package,
     const unsigned int package_size,
     const sockaddr_in from
@@ -379,7 +379,7 @@ inline void Client::HandleHandshakeResponse(
     Server::mutex.unlock();
 }
 
-inline void Client::HandleTransferData(
+FORCE_INLINE void Client::HandleTransferData(
     TransferData* const package,
     unsigned int package_size,
     sockaddr_in from

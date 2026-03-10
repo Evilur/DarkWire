@@ -1,6 +1,7 @@
 #pragma once
 
 #include "util/class.h"
+#include "util/macro.h"
 
 template <typename T>
 class LinkedList final {
@@ -75,31 +76,37 @@ private:
 };
 
 template <typename T>
+FORCE_INLINE
 LinkedList<T>::~LinkedList() noexcept {
     while (_head != nullptr) CutNode(_head);
 }
 
 template <typename T>
+FORCE_INLINE
 T* LinkedList<T>::Head() noexcept {
     return _head == nullptr ? nullptr : &_head->value;
 }
 
 template <typename T>
+FORCE_INLINE
 const T* LinkedList<T>::Head() const noexcept {
     return _head == nullptr ? nullptr : &_head->value;
 }
 
 template <typename T>
+FORCE_INLINE
 T* LinkedList<T>::Tail() noexcept {
     return _tail == nullptr ? nullptr : &_tail->value;
 }
 
 template <typename T>
+FORCE_INLINE
 const T* LinkedList<T>::Tail() const noexcept {
     return _tail == nullptr ? nullptr : &_tail->value;
 }
 
 template <typename T>
+FORCE_INLINE
 void LinkedList<T>::Push(const T& element) noexcept {
     /* If the list was empty */
     if (_head == nullptr) {
@@ -115,6 +122,7 @@ void LinkedList<T>::Push(const T& element) noexcept {
 }
 
 template <typename T>
+FORCE_INLINE
 void LinkedList<T>::Push(T&& element) noexcept {
     /* If the list was empty */
     if (_head == nullptr) {
@@ -130,6 +138,7 @@ void LinkedList<T>::Push(T&& element) noexcept {
 }
 
 template <typename T>
+FORCE_INLINE
 bool LinkedList<T>::Pop() noexcept {
     if (_head == nullptr) return false;
     CutNode(_head);
@@ -138,6 +147,7 @@ bool LinkedList<T>::Pop() noexcept {
 }
 
 template <typename T>
+FORCE_INLINE
 unsigned int LinkedList<T>::Pop(const unsigned int number) noexcept {
     for (unsigned int i = 0; i < number; ++i) {
         if (_head == nullptr) {
@@ -151,6 +161,7 @@ unsigned int LinkedList<T>::Pop(const unsigned int number) noexcept {
 }
 
 template <typename T>
+FORCE_INLINE
 unsigned int LinkedList<T>::Remove(unsigned int index,
                                    unsigned int number) noexcept {
     /* If we are deleting first elements */
@@ -185,6 +196,7 @@ unsigned int LinkedList<T>::Remove(unsigned int index,
 }
 
 template <typename T>
+FORCE_INLINE
 bool LinkedList<T>::PopTail() noexcept {
     /* If the list is empty */
     if (_head == nullptr) return false;
@@ -208,6 +220,7 @@ bool LinkedList<T>::PopTail() noexcept {
 }
 
 template <typename T>
+FORCE_INLINE
 T* LinkedList<T>::Get(unsigned int index) noexcept {
     Node* node_ptr = _head;
     while (index-- > 0) {
@@ -218,6 +231,7 @@ T* LinkedList<T>::Get(unsigned int index) noexcept {
 }
 
 template <typename T>
+FORCE_INLINE
 const T* LinkedList<T>::Get(unsigned int index) const noexcept {
     Node* node_ptr = _head;
     while (index-- > 0) {
@@ -229,6 +243,7 @@ const T* LinkedList<T>::Get(unsigned int index) const noexcept {
 }
 
 template <typename T>
+FORCE_INLINE
 LinkedList<T>::Iterator LinkedList<T>::begin() const noexcept {
     return Iterator(_head);
 }

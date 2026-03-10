@@ -43,7 +43,7 @@ private:
     bool _is_up = false;
 };
 
-inline TUN::TUN(const char* const name) : _tun_name(name),
+FORCE_INLINE TUN::TUN(const char* const name) : _tun_name(name),
     /* Open the TUN device */
     _tun_fd(open("/dev/net/tun", O_RDWR | O_CLOEXEC)) {
     if (_tun_fd == -1) throw TunError("Failed to open the TUN device");
@@ -69,9 +69,9 @@ inline TUN::TUN(const char* const name) : _tun_name(name),
                                 name));
 }
 
-inline TUN::~TUN() noexcept { close(_tun_fd); }
+FORCE_INLINE TUN::~TUN() noexcept { close(_tun_fd); }
 
-inline void TUN::Up() noexcept {
+FORCE_INLINE void TUN::Up() noexcept {
     /* Exec pre up commands */
     for (const String& command : Config::Interface::pre_up)
         System::Exec(command);
@@ -92,9 +92,9 @@ inline void TUN::Up() noexcept {
         System::Exec(command);
 }
 
-inline bool TUN::IsUp() const noexcept { return _is_up; }
+FORCE_INLINE bool TUN::IsUp() const noexcept { return _is_up; }
 
-inline int TUN::Read(char* const buffer, const unsigned int mtu)
+FORCE_INLINE int TUN::Read(char* const buffer, const unsigned int mtu)
 const noexcept {
 #if LOG_LEVEL == 0
     const int result = (int)read(_tun_fd, buffer, mtu);
@@ -108,7 +108,7 @@ const noexcept {
 #endif
 }
 
-inline void TUN::Write(const char* const buffer,
+FORCE_INLINE void TUN::Write(const char* const buffer,
                        const unsigned int buffer_size) noexcept {
     TRACE_LOG("Writing %u bytes to the TUN", buffer_size);
     write(_tun_fd, buffer, buffer_size);

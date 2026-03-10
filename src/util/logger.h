@@ -1,9 +1,11 @@
 #pragma once
 
+#include "util/macro.h"
+
 #include <cstdio>
 #include <ctime>
 
-#define LOG_LEVEL 0
+#define LOG_LEVEL 10
 
 #if LOG_LEVEL == 0
 #define TRACE_LOG(...) Logger::Log(stdout, Logger::TRACE, __VA_ARGS__)
@@ -48,10 +50,10 @@ public:
     };
 
     template <typename... Args>
-    inline static void Log(FILE* stream,
-                           LogLevel log_level,
-                           const char* format,
-                           Args... args);
+    static void Log(FILE* stream,
+                    LogLevel log_level,
+                    const char* format,
+                    Args... args);
 
 private:
     static constexpr const char* const COLOR_CODE_STR[] = {
@@ -64,7 +66,8 @@ private:
 };
 
 template <typename... Args>
-inline void Logger::Log(FILE* const stream,
+FORCE_INLINE
+void Logger::Log(FILE* const stream,
                  const LogLevel log_level,
                  const char* const format,
                  Args... args) {

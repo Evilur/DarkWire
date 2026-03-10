@@ -1,6 +1,7 @@
 #pragma once
 
 #include "util/class.h"
+#include "util/macro.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -17,7 +18,7 @@ public:
     static void Exec(const char* command);
 };
 
-inline void System::Exec(const char* const command) {
+FORCE_INLINE void System::Exec(const char* const command) {
     printf("\033[0m[#] %s\n", command);
     system(command);
 }

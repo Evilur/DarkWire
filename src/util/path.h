@@ -1,5 +1,6 @@
 #pragma once
 #include "util/class.h"
+#include "util/macro.h"
 
 #include <filesystem>
 
@@ -17,7 +18,7 @@ public:
     PREVENT_INSTANTIATION(Path);
 
     /* Initialize the class */
-    inline static void Init();
+    static void Init();
 
 /* If we are compiling for Unix based */
 #if defined(__unix__) || defined(__unix) || defined(unix)
@@ -26,7 +27,7 @@ public:
 #endif
 };
 
-inline void Path::Init() {
+FORCE_INLINE void Path::Init() {
     /* Create all necessary directories */
     fs::create_directories(CONFIG_DIR);
 }

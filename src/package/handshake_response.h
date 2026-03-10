@@ -26,7 +26,7 @@ struct HandshakeResponse final {
                       unsigned char response_netmask) noexcept;
 } __attribute__((packed));
 
-inline HandshakeResponse::HandshakeResponse(
+FORCE_INLINE HandshakeResponse::HandshakeResponse(
     const unsigned char* const epk,
     Nonce& nonce,
     const unsigned int response_local_ip,
