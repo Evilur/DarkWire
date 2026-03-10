@@ -46,5 +46,5 @@ inline HandshakeResponse::HandshakeResponse(
     payload.netmask = response_netmask;
 
     /* Set the server's local ip */
-    payload.server_local_ip = local_ip.netb;
+    payload.server_local_ip = local_ip.Netb();
 }

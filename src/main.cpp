@@ -367,15 +367,15 @@ static inline int run_client() {
         NetAddr destinastion; destinastion.SetNetb(ip_header->daddr);
 
         /* Drop multicasts */
-        if (destinastion.hostb >= 0xe0000000 &&
-            destinastion.hostb <= 0xefffffff)
+        if (destinastion.Hostb() >= 0xe0000000 &&
+            destinastion.Hostb() <= 0xefffffff)
             continue;
 
         /* Drop broadcast */
-        if (destinastion.hostb == broadcast.hostb) continue;
+        if (destinastion.Hostb() == broadcast.Hostb()) continue;
 
         /* Handle the TUN package */
-        Client::HandleTunPackage(buffer, package_size, destinastion.netb);
+        Client::HandleTunPackage(buffer, package_size, destinastion.Netb());
     }
 
     return -1;
@@ -405,15 +405,15 @@ static inline int run_server() {
         NetAddr destinastion; destinastion.SetNetb(ip_header->daddr);
 
         /* Drop multicasts */
-        if (destinastion.hostb >= 0xe0000000 &&
-            destinastion.hostb <= 0xefffffff)
+        if (destinastion.Hostb() >= 0xe0000000 &&
+            destinastion.Hostb() <= 0xefffffff)
             continue;
 
         /* Drop broadcast */
-        if (destinastion.hostb == broadcast.hostb) continue;
+        if (destinastion.Hostb() == broadcast.Hostb()) continue;
 
         /* Handle the TUN package */
-        Server::HandleTunPackage(buffer, package_size, destinastion.netb);
+        Server::HandleTunPackage(buffer, package_size, destinastion.Netb());
     }
 
     return -1;
@@ -421,6 +421,6 @@ static inline int run_server() {
 
 inline void calc_net() {
     binmask.SetHostb((netmask == 0) ? 0x0U : (~0U << (32U - netmask)));
-    network_prefix.SetHostb(local_ip.hostb & binmask.hostb);
-    broadcast.SetHostb(network_prefix.hostb | ~binmask.hostb);
+    network_prefix.SetHostb(local_ip.Hostb() & binmask.Hostb());
+    broadcast.SetHostb(network_prefix.Hostb() | ~binmask.Hostb());
 }

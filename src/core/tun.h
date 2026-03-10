@@ -77,7 +77,7 @@ inline void TUN::Up() noexcept {
         System::Exec(command);
 
     System::Exec(String::Format("ip addr add %s/%hhu dev %s",
-                                inet_ntoa({ local_ip.netb }),
+                                inet_ntoa({ local_ip.Netb() }),
                                 netmask,
                                 _tun_name.CStr()));
     System::Exec(String::Format("ip link set %s mtu %d",

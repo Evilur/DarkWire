@@ -120,7 +120,7 @@ inline void Server::Init() {
         Peers::timestamps->Put(public_key, 0UL);
 
     /* Add server to the peers list */
-    Peers::details->Put(local_ip.netb, {});
+    Peers::details->Put(local_ip.Netb(), {});
 }
 
 inline void Server::HandleTunPackage(const char* const buffer,
@@ -310,8 +310,8 @@ inline void Server::HandleHandshakeRequest(
             response_netmask = netmask;
 
             /* Try to get the random ip in the local network */
-            const unsigned int start = network_prefix.hostb;
-            const unsigned int end = broadcast.hostb;
+            const unsigned int start = network_prefix.Hostb();
+            const unsigned int end = broadcast.Hostb();
             const unsigned int random_ip =
                 (unsigned int)(start + (rand() % (end - start + 1)));
             const unsigned int random_ip_netb = htonl(random_ip);
@@ -423,7 +423,7 @@ inline void Server::HandleTransferData(
     const unsigned int destination_netb = package->header.destination_ip;
 
     /* If we need to decrypt the package */
-    if (destination_netb == INADDR_ANY || destination_netb == local_ip.netb) {
+    if (destination_netb == INADDR_ANY || destination_netb == local_ip.Netb()) {
         /* Try to get the key to decrypt the package */
         std::lock_guard keys_lock(Peers::keys_mutex);
         const UniqPtr<unsigned char[]>* const key = Peers::keys->Get(from);
