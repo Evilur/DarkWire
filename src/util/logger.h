@@ -5,7 +5,7 @@
 #include <cstdio>
 #include <ctime>
 
-#define LOG_LEVEL 10
+#define LOG_LEVEL 0
 
 #if LOG_LEVEL == 0
 #define TRACE_LOG(...) Logger::Log(stdout, Logger::TRACE, __VA_ARGS__)
