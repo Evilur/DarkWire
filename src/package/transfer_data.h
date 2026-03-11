@@ -1,5 +1,6 @@
 #pragma once
 
+#include "main.h"
 #include "package_type.h"
 #include "socket/udp_socket.h"
 #include "util/macro.h"
@@ -12,6 +13,7 @@ struct TransferData final {
     struct {
         PackageType type;
         unsigned char nonce[crypto_aead_chacha20poly1305_ietf_NPUBBYTES];
+        unsigned int source_ip;
         unsigned int destination_ip;
     } __attribute__((packed)) header;
     struct {
@@ -22,8 +24,6 @@ struct TransferData final {
                           unsigned int destination_ip,
                           const char* buffer,
                           int buffer_size) noexcept;
-
-    [[nodiscard]] unsigned int Size(int buffer_size) const noexcept;
 } __attribute__((packed));
 
 FORCE_INLINE TransferData::TransferData(Nonce& nonce,
@@ -32,13 +32,7 @@ FORCE_INLINE TransferData::TransferData(Nonce& nonce,
                                         const  int buffer_size) noexcept {
     header.type = TRANSFER_DATA;
     nonce.Copy(header.nonce);
+    header.source_ip = local_ip.Netb();
     header.destination_ip = destination_ip;
     memcpy(payload.buffer, buffer, (unsigned long)buffer_size);
-}
-
-FORCE_INLINE unsigned int TransferData::Size(const int buffer_size)
-const noexcept {
-    return sizeof(header) +
-           buffer_size +
-           crypto_aead_chacha20poly1305_ietf_ABYTES;
 }

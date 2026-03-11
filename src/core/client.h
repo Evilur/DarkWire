@@ -73,19 +73,14 @@ private:
         struct Details {
             sockaddr_in endpoint;
             unsigned long last_package_timestamp;
-            unsigned char* key;
+            unsigned char key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
             Nonce nonce;
-        } __attribute__((aligned(64)));
+        } __attribute__((aligned(128)));
 
         static inline Dictionary<unsigned int,
                                  Details,
                                  unsigned int>* details = nullptr;
         static inline std::mutex details_mutex;
-
-        static inline Dictionary<sockaddr_in,
-                                 UniqPtr<unsigned char[]>,
-                                 unsigned int>* keys = nullptr;
-        static inline std::mutex keys_mutex;
     };
 };
 
@@ -103,7 +98,7 @@ FORCE_INLINE void Client::Init() {
     Server::public_key =
         new unsigned char[crypto_scalarmult_BYTES];
     Server::chain_key =
-        new unsigned char[crypto_aead_chacha20poly1305_KEYBYTES];
+        new unsigned char[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
 
     /* Get the server's public key */
     const char* public_key_base64 = Config::Server::public_key;
@@ -118,11 +113,6 @@ FORCE_INLINE void Client::Init() {
                                     Peers::Details,
                                     unsigned int>(16);
     Peers::details_mutex.unlock();
-    Peers::keys_mutex.lock();
-    Peers::keys = new Dictionary<sockaddr_in,
-                                 UniqPtr<unsigned char[]>,
-                                 unsigned int>(16);
-    Peers::keys_mutex.unlock();
 }
 
 FORCE_INLINE void Client::RunHandshakeLoop() {
@@ -358,19 +348,15 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
 
     /* Add the server to the peers list */
     {
-        std::lock_guard details_lock(Peers::details_mutex);
-        Peers::details->Put(package->payload.server_local_ip, {
+        Peers::Details details = {
             .endpoint = Server::endpoint,
             .last_package_timestamp = ULONG_MAX,
-            .key = Server::chain_key,
             .nonce = Server::nonce
-        });
-    }
-
-    /* Put the server's key to the keys dictionary */
-    {
-        std::lock_guard keys_lock(Peers::keys_mutex);
-        Peers::keys->Put(Server::endpoint, Server::chain_key);
+        };
+        memcpy(details.key, Server::chain_key,
+               crypto_aead_chacha20poly1305_ietf_KEYBYTES);
+        std::lock_guard details_lock(Peers::details_mutex);
+        Peers::details->Put(package->payload.server_local_ip, details);
     }
 
     /* If all is OK, next handshake will be after 3 minutes */
@@ -389,9 +375,10 @@ FORCE_INLINE void Client::HandleTransferData(
               ntohs(from.sin_port));
 
     /* Get the key pointer */
-    std::lock_guard keys_lock(Peers::keys_mutex);
-    const UniqPtr<unsigned char[]>* const key = Peers::keys->Get(from);
-    if (key == nullptr) { return; }
+    std::lock_guard details_lock(Peers::details_mutex);
+    const Peers::Details* const peers_details =
+        Peers::details->Get(package->header.source_ip);
+    if (peers_details == nullptr) { return; }
 
     /* Try to decrypt the package */
     unsigned long long buffer_size;
@@ -404,7 +391,7 @@ FORCE_INLINE void Client::HandleTransferData(
         (unsigned char*)(void*)&package->header,
         sizeof(package->header),
         package->header.nonce,
-        key->Get()
+        peers_details->key
     ) != 0) {
         WARN_LOG("Forged message found");
         return;

@@ -44,7 +44,7 @@ private:
             Nonce nonce;
             sockaddr_in endpoint;
             unsigned char static_public_key[crypto_scalarmult_BYTES];
-            unsigned char chain_key[crypto_aead_chacha20poly1305_KEYBYTES];
+            unsigned char chain_key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
         } __attribute__((aligned(128)));
 
         static inline unsigned int number = 0;
@@ -58,10 +58,6 @@ private:
                                  unsigned long,
                                  unsigned int>* timestamps = nullptr;
         static inline std::mutex timestamps_mutex;
-        static inline Dictionary<sockaddr_in,
-                                 UniqPtr<unsigned char[]>,
-                                 unsigned int>* keys = nullptr;
-        static inline std::mutex keys_mutex;
     };
 
     static void HandleHandshakeRequest(
@@ -109,10 +105,6 @@ FORCE_INLINE void Server::Init() {
     Peers::timestamps = new Dictionary<KeyBuffer,
                                        unsigned long,
                                        unsigned int>(Peers::number);
-    std::lock_guard keys_lock(Peers::keys_mutex);
-    Peers::keys = new Dictionary<sockaddr_in,
-                                 UniqPtr<unsigned char[]>,
-                                 unsigned int>(Peers::number);
 
     /* Fill timestamps dictionary with zeros */
     std::lock_guard public_keys_lock(Peers::public_keys_mutex);
@@ -376,7 +368,7 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
                crypto_scalarmult_BYTES);
         memcpy(details.chain_key,
                chain_key,
-               crypto_aead_chacha20poly1305_KEYBYTES);
+               crypto_aead_chacha20poly1305_ietf_KEYBYTES);
         Peers::details->Put(response_ip, details);
     }
 
@@ -404,10 +396,6 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     main_socket.Send((char*)(void*)&response,
                      sizeof(HandshakeResponse),
                      from);
-
-    /* Save the peer's chain key */
-    std::lock_guard keys_lock(Peers::keys_mutex);
-    Peers::keys->Put(from, std::move(chain_key));
 }
 
 FORCE_INLINE void Server::HandleTransferData(
@@ -425,9 +413,10 @@ FORCE_INLINE void Server::HandleTransferData(
     /* If we need to decrypt the package */
     if (destination_netb == INADDR_ANY || destination_netb == local_ip.Netb()) {
         /* Try to get the key to decrypt the package */
-        std::lock_guard keys_lock(Peers::keys_mutex);
-        const UniqPtr<unsigned char[]>* const key = Peers::keys->Get(from);
-        if (key == nullptr) return;
+        std::lock_guard details_lock(Peers::details_mutex);
+        const Peers::Details* const peers_details =
+            Peers::details->Get(package->header.source_ip);
+        if (peers_details == nullptr) { return; }
 
         /* Decrypt the package */
         unsigned long long buffer_size;
@@ -440,7 +429,7 @@ FORCE_INLINE void Server::HandleTransferData(
             (unsigned char*)(void*)&package->header,
             sizeof(package->header),
             package->header.nonce,
-            key->Get()
+            peers_details->chain_key
         ) != 0) {
             WARN_LOG("Forged message found");
             return;
@@ -457,8 +446,10 @@ FORCE_INLINE void Server::HandleTransferData(
                       inet_ntoa(peer_details->endpoint.sin_addr),
                       ntohs(peer_details->endpoint.sin_port));
 
-            /* Update the nonce */
+            /* Update the nonce and the source ip */
             peer_details->nonce.Copy(package->header.nonce);
+            package->header.source_ip = local_ip.Netb();
+
 
             /* Encrypt the package */
             crypto_aead_chacha20poly1305_ietf_encrypt(
