@@ -5,8 +5,9 @@ enum PackageType : unsigned char {
     HANDSHAKE_RESPONSE = 2,
     GET_PEER_REQUEST = 3,
     GET_PEER_RESPONSE = 4,
-    GENKEY_REQUEST = 5,
-    GENKEY_RESPOSNE = 6,
-    KEEPALIVE = 7,
-    TRANSFER_DATA = 8
+    HOLE_PUNCH = 5,
+    GENKEY_REQUEST = 6,
+    GENKEY_RESPOSNE = 7,
+    KEEPALIVE = 8,
+    TRANSFER_DATA = 9
 };
