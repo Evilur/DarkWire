@@ -378,7 +378,7 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
 
     /* If all is OK, next handshake will be after 3 minutes */
     INFO_LOG("The handshake response has been successfully handled");
-    _next_handshake_timestamp = (unsigned long)std::time(nullptr) + 0;
+    _next_handshake_timestamp = (unsigned long)std::time(nullptr) + 180;
     Server::mutex.unlock();
 }
 
