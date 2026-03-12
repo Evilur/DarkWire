@@ -39,9 +39,9 @@ public:
                                  unsigned int destination_netb) noexcept;
 
 private:
-    struct Peers {
-        struct Details {
-            Nonce nonce;
+    struct Peers final {
+        struct Details final {
+            UniqPtr<Nonce> nonce;
             sockaddr_in endpoint;
             unsigned char static_public_key[crypto_scalarmult_BYTES];
             unsigned char chain_key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
@@ -112,7 +112,7 @@ FORCE_INLINE void Server::Init() {
         Peers::timestamps->Put(public_key, 0UL);
 
     /* Add server to the peers list */
-    Peers::details->Put(local_ip.Netb(), {});
+    Peers::details->Put(local_ip.Netb(), { .nonce = nullptr });
 }
 
 FORCE_INLINE void Server::HandleTunPackage(const char* const buffer,
@@ -125,7 +125,7 @@ noexcept {
     if (details == nullptr) return;
 
     /* Create the response */
-    TransferData package(details->nonce,
+    TransferData package(*details->nonce,
                          destination_netb,
                          buffer,
                          buffer_size);
@@ -357,12 +357,14 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     }
     hkdf(chain_key, chain_key, shared);
 
+    Nonce* nonce = new Nonce(package->header.nonce);
+
     /* If all is OK, save the current peer */
-    Peers::Details details {
-        .nonce = Nonce(package->header.nonce),
-        .endpoint = from
-    };
     {
+        Peers::Details details {
+            .nonce = nonce,
+            .endpoint = from
+        };
         std::lock_guard details_lock(Peers::details_mutex);
         memcpy(details.static_public_key,
                package->payload.static_public_key,
@@ -370,12 +372,12 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
         memcpy(details.chain_key,
                chain_key,
                crypto_aead_chacha20poly1305_ietf_KEYBYTES);
-        Peers::details->Put(response_ip, details);
+        Peers::details->Put(response_ip, std::move(details));
     }
 
     /* Assemble the response */
     HandshakeResponse response(ephemeral_keys.Public(),
-                               details.nonce,
+                               *nonce,
                                response_ip,
                                response_netmask);
 
@@ -448,7 +450,7 @@ FORCE_INLINE void Server::HandleTransferData(
                       ntohs(peer_details->endpoint.sin_port));
 
             /* Update the nonce and the source ip */
-            peer_details->nonce.Copy(package->header.nonce);
+            peer_details->nonce->Copy(package->header.nonce);
             package->header.source_ip = local_ip.Netb();
 
 

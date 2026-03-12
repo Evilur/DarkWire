@@ -176,7 +176,7 @@ dictionary_hash_func<K> H,
 dictionary_equal<K> E>
 FORCE_INLINE
 bool Dictionary<K, T, S, H, E>::Put(dictionary_optimal_param<K> key,
-                                 const T& element) noexcept {
+                                    const T& element) noexcept {
     /* Calculate the key hash */
     const S hash = H(key) % _capacity;
 

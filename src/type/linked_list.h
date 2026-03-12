@@ -2,6 +2,7 @@
 
 #include "util/class.h"
 #include "util/macro.h"
+#include <algorithm>
 
 template <typename T>
 class LinkedList final {

@@ -44,14 +44,28 @@ public:
                                  unsigned int destination_netb) noexcept;
 
 private:
-    struct Server {
-        static inline Nonce nonce;
+    struct Server final {
+        static inline Nonce* nonce;
         static inline sockaddr_in endpoint;
         static inline unsigned int local_ip_netb;
         static inline unsigned char* public_key = nullptr;
         static inline unsigned char* chain_key = nullptr;
         static inline UniqPtr<Keys> ephemeral_keys = nullptr;
         static inline std::mutex mutex;
+    };
+
+    struct Peers final {
+        struct Details final {
+            sockaddr_in endpoint;
+            unsigned long last_package_timestamp;
+            unsigned char key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
+            UniqPtr<Nonce> nonce;
+        } __attribute__((aligned(128)));
+
+        static inline Dictionary<unsigned int,
+                                 Details,
+                                 unsigned int>* details = nullptr;
+        static inline std::mutex details_mutex;
     };
 
     static inline unsigned long _next_handshake_timestamp =
@@ -68,20 +82,6 @@ private:
         unsigned int package_size,
         sockaddr_in from
     ) noexcept;
-
-    struct Peers {
-        struct Details {
-            sockaddr_in endpoint;
-            unsigned long last_package_timestamp;
-            unsigned char key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
-            Nonce nonce;
-        } __attribute__((aligned(128)));
-
-        static inline Dictionary<unsigned int,
-                                 Details,
-                                 unsigned int>* details = nullptr;
-        static inline std::mutex details_mutex;
-    };
 };
 
 FORCE_INLINE void Client::Init() {
@@ -135,11 +135,11 @@ FORCE_INLINE void Client::RunHandshakeLoop() {
         Server::ephemeral_keys = new Keys();
 
         /* Initialize the nonce */
-        Server::nonce = Nonce();
+        Server::nonce = new Nonce();
 
         /* Fill the request */
         HandshakeRequest request(Server::ephemeral_keys->Public(),
-                                 Server::nonce);
+                                 *Server::nonce);
 
         /* Compute the first shared secret */
         unsigned char shared[crypto_scalarmult_BYTES];
@@ -231,30 +231,31 @@ FORCE_INLINE void Client::HandleTunPackage(const char* const buffer,
                                      const int buffer_size,
                                      unsigned int destination_netb)
 noexcept {
-    /* Try to get the details from the peers list */
-    Peers::details_mutex.lock();
-    Peers::Details* const details = Peers::details->Get(destination_netb);
-    Peers::details_mutex.unlock();
-
     /* Init endpoint, key and nonce variables */
     sockaddr_in endpoint;
     const unsigned char* key;
     Nonce* nonce;
 
-    /* If there is such and ip in the dictionary */
-    if (details != nullptr) {
-        endpoint = details->endpoint;
-        key = details->key;
-        nonce = &details->nonce;
-    /* If there is no such an ip in the dictionary */
-    } else {
-        endpoint = Server::endpoint;
-        key = Server::chain_key;
-        nonce = &Server::nonce;
-        destination_netb = INADDR_ANY;
+    {
+        /* Try to get the details from the peers list */
+        std::lock_guard details_lock(Peers::details_mutex);
+        Peers::Details* const details = Peers::details->Get(destination_netb);
 
-        /* TODO */
-        /* Get the peer from the server */
+        /* If there is such and ip in the dictionary */
+        if (details != nullptr) {
+            endpoint = details->endpoint;
+            key = details->key;
+            nonce = details->nonce;
+            /* If there is no such an ip in the dictionary */
+        } else {
+            endpoint = Server::endpoint;
+            key = Server::chain_key;
+            nonce = Server::nonce;
+            destination_netb = INADDR_ANY;
+
+            /* TODO */
+            /* Get the peer from the server */
+        }
     }
 
     TRACE_LOG("Sending the transfer data to the %s:%hu",
@@ -348,20 +349,36 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
 
     /* Add the server to the peers list */
     {
-        Peers::Details details = {
-            .endpoint = Server::endpoint,
-            .last_package_timestamp = ULONG_MAX,
-            .nonce = Server::nonce
-        };
-        memcpy(details.key, Server::chain_key,
-               crypto_aead_chacha20poly1305_ietf_KEYBYTES);
+        /* Try to get the server from the peers dictionary */
         std::lock_guard details_lock(Peers::details_mutex);
-        Peers::details->Put(package->payload.server_local_ip, details);
+        Peers::Details* const server_details =
+            Peers::details->Get(package->payload.server_local_ip);
+
+        /* If there is no server in the peers dictionary */
+        if (server_details == nullptr) {
+            /* Assemble the new details */
+            Peers::Details details = {
+                .endpoint = Server::endpoint,
+                .last_package_timestamp = ULONG_MAX,
+                .nonce = Server::nonce
+            };
+            memcpy(details.key, Server::chain_key,
+                   crypto_aead_chacha20poly1305_ietf_KEYBYTES);
+
+            /* Put the new data to the lists dictionary */
+            Peers::details->Put(package->payload.server_local_ip,
+                                std::move(details));
+        /* Otherwise, update the existing details */
+        } else {
+            server_details->nonce = Server::nonce;
+            memcpy(server_details->key, Server::chain_key,
+                   crypto_aead_chacha20poly1305_ietf_KEYBYTES);
+        }
     }
 
     /* If all is OK, next handshake will be after 3 minutes */
     INFO_LOG("The handshake response has been successfully handled");
-    _next_handshake_timestamp = (unsigned long)std::time(nullptr) + 180;
+    _next_handshake_timestamp = (unsigned long)std::time(nullptr) + 0;
     Server::mutex.unlock();
 }
 
