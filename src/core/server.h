@@ -195,8 +195,7 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
              ntohs(from.sin_port));
 
     /* Buffer for the chained key */
-    UniqPtr<unsigned char[]> chain_key =
-        new unsigned char[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
+    unsigned char chain_key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
 
     /* Decrypt the request payload */
     {
@@ -288,8 +287,10 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
         std::lock_guard details_lock(Peers::details_mutex);
         for (const auto& [ip, details] : *Peers::details)
             if (equal((KeyBuffer)details.static_public_key,
-                      (KeyBuffer)package->payload.static_public_key))
-                Peers::details->Delete(ip);
+                      (KeyBuffer)package->payload.static_public_key)) {
+            Peers::details->Delete(ip);
+            break;
+        }
 
         /* If there already an ip address passed */
         if (client_ip != INADDR_ANY && client_netmask != 0) {
