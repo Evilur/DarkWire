@@ -19,6 +19,7 @@
 #include <mutex>
 #include <netinet/in.h>
 #include <netinet/ip.h>
+#include <shared_mutex>
 
 /**
  * Static class for server only methods
@@ -49,15 +50,13 @@ private:
 
         static inline unsigned int number = 0;
         static inline LinkedList<const unsigned char*>* public_keys = nullptr;
-        static inline std::mutex public_keys_mutex;
         static inline Dictionary<unsigned int,
                                  Details,
                                  unsigned int>* details = nullptr;
-        static inline std::mutex details_mutex;
+        static inline std::shared_mutex details_mutex;
         static inline Dictionary<KeyBuffer,
                                  unsigned long,
                                  unsigned int>* timestamps = nullptr;
-        static inline std::mutex timestamps_mutex;
     };
 
     static void HandleHandshakeRequest(
@@ -75,7 +74,6 @@ private:
 
 FORCE_INLINE void Server::SavePeer(const unsigned char* const public_key) {
     /* If the peers list isn't defined yet */
-    std::lock_guard public_keys_lock(Peers::public_keys_mutex);
     if (Peers::public_keys == nullptr) {
         /* Allocate the memory for the peers list */
         Peers::public_keys = new LinkedList<const unsigned char*>();
@@ -97,17 +95,14 @@ FORCE_INLINE void Server::Init() {
     main_socket.SetOption(SO_SNDBUF, &sndbuf, sizeof(sndbuf));
 
     /* Allocate the memory for dictionaries */
-    std::lock_guard details_lock(Peers::details_mutex);
     Peers::details = new Dictionary<unsigned int,
                                     Peers::Details,
                                     unsigned int>(Peers::number);
-    std::lock_guard timestamps_lock(Peers::timestamps_mutex);
     Peers::timestamps = new Dictionary<KeyBuffer,
                                        unsigned long,
                                        unsigned int>(Peers::number);
 
     /* Fill timestamps dictionary with zeros */
-    std::lock_guard public_keys_lock(Peers::public_keys_mutex);
     for (const unsigned char* public_key : *Peers::public_keys)
         Peers::timestamps->Put(public_key, 0UL);
 
@@ -120,7 +115,7 @@ FORCE_INLINE void Server::HandleTunPackage(const char* const buffer,
                                      const unsigned int destination_netb)
 noexcept {
     /* Try to get the peers details */
-    std::lock_guard details_lock(Peers::details_mutex);
+    std::shared_lock details_lock(Peers::details_mutex);
     Peers::Details* const details = Peers::details->Get(destination_netb);
     if (details == nullptr) return;
 
@@ -143,6 +138,7 @@ noexcept {
         package.header.nonce,
         details->chain_key
     );
+    details_lock.unlock();
 
     /* Send the encrypted message */
     main_socket.Send((char*)(void*)&package,
@@ -234,7 +230,6 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     {
         /* Try to find such a static key in the allowed peers linked list */
         bool is_allowed = false;
-        std::lock_guard public_keys_lock(Peers::public_keys_mutex);
         for (const unsigned char* public_key : *Peers::public_keys)
             if (memcmp(package->payload.static_public_key,
                        public_key,
@@ -261,16 +256,14 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
         if (delta_time > 120) return;
 
         /* Get the last timestamp for such a key */
-        Peers::timestamps_mutex.lock();
-        unsigned long last_timestamp =
-            *Peers::timestamps->Get(package->payload.static_public_key);
-        Peers::timestamps_mutex.unlock();
+        unsigned long* const last_timestamp =
+            Peers::timestamps->Get(package->payload.static_public_key);
 
         /* Compare current timestamp with the last one */
-        if (client_timestamp <= last_timestamp) return;
+        if (client_timestamp <= *last_timestamp) return;
 
         /* If all is ok, update the last timestamp */
-        last_timestamp = client_timestamp;
+        *last_timestamp = client_timestamp;
     }
 
     /* Variables for the response (default is data from the request) */
@@ -284,7 +277,7 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
         const unsigned char client_netmask = response_netmask;
 
         /* Try to delete the peer with such a static key (if exists) */
-        std::lock_guard details_lock(Peers::details_mutex);
+        std::unique_lock details_lock(Peers::details_mutex);
         for (const auto& [ip, details] : *Peers::details)
             if (equal((KeyBuffer)details.static_public_key,
                       (KeyBuffer)package->payload.static_public_key)) {
@@ -365,7 +358,7 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
             .nonce = nonce,
             .endpoint = from
         };
-        std::lock_guard details_lock(Peers::details_mutex);
+        std::unique_lock details_lock(Peers::details_mutex);
         memcpy(details.static_public_key,
                package->payload.static_public_key,
                crypto_scalarmult_BYTES);
@@ -416,7 +409,7 @@ FORCE_INLINE void Server::HandleTransferData(
     /* If we need to decrypt the package */
     if (destination_netb == INADDR_ANY || destination_netb == local_ip.Netb()) {
         /* Try to get the key to decrypt the package */
-        std::lock_guard details_lock(Peers::details_mutex);
+        std::shared_lock details_lock(Peers::details_mutex);
         const Peers::Details* const peers_details =
             Peers::details->Get(package->header.source_ip);
         if (peers_details == nullptr) { return; }
@@ -437,6 +430,7 @@ FORCE_INLINE void Server::HandleTransferData(
             WARN_LOG("Forged message found");
             return;
         }
+        details_lock.unlock();
 
         /* If we need to resend the package to the other peer */
         if (destination_netb == INADDR_ANY) {
@@ -480,7 +474,7 @@ FORCE_INLINE void Server::HandleTransferData(
 
     /* If we need to transit the package */
     /* Try to get the peer endpoint */
-    std::lock_guard details_lock(Peers::details_mutex);
+    std::shared_lock details_lock(Peers::details_mutex);
     const Peers::Details* const peer_details =
         Peers::details->Get(destination_netb);
     if (peer_details == nullptr) return;

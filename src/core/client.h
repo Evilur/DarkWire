@@ -20,6 +20,7 @@
 #include <ctime>
 #include <mutex>
 #include <netinet/in.h>
+#include <shared_mutex>
 #include <sodium.h>
 #include <unistd.h>
 
@@ -60,12 +61,12 @@ private:
             unsigned long last_package_timestamp;
             unsigned char key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
             UniqPtr<Nonce> nonce;
-        } __attribute__((aligned(128)));
+        } __attribute__((aligned(64)));
 
         static inline Dictionary<unsigned int,
                                  Details,
                                  unsigned int>* details = nullptr;
-        static inline std::mutex details_mutex;
+        static inline std::shared_mutex details_mutex;
     };
 
     static inline unsigned long _next_handshake_timestamp =
@@ -108,11 +109,9 @@ FORCE_INLINE void Client::Init() {
                       sodium_base64_VARIANT_ORIGINAL);
 
     /* Allocate memory for peers */
-    Peers::details_mutex.lock();
     Peers::details = new Dictionary<unsigned int,
                                     Peers::Details,
                                     unsigned int>(16);
-    Peers::details_mutex.unlock();
 }
 
 FORCE_INLINE void Client::RunHandshakeLoop() {
@@ -238,7 +237,7 @@ noexcept {
 
     {
         /* Try to get the details from the peers list */
-        std::lock_guard details_lock(Peers::details_mutex);
+        std::shared_lock details_lock(Peers::details_mutex);
         Peers::Details* const details = Peers::details->Get(destination_netb);
 
         /* If there is such and ip in the dictionary */
@@ -350,7 +349,7 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
     /* Add the server to the peers list */
     {
         /* Try to get the server from the peers dictionary */
-        std::lock_guard details_lock(Peers::details_mutex);
+        std::unique_lock details_lock(Peers::details_mutex);
         Peers::Details* const server_details =
             Peers::details->Get(package->payload.server_local_ip);
 
@@ -392,7 +391,7 @@ FORCE_INLINE void Client::HandleTransferData(
               ntohs(from.sin_port));
 
     /* Get the key pointer */
-    std::lock_guard details_lock(Peers::details_mutex);
+    std::shared_lock details_lock(Peers::details_mutex);
     const Peers::Details* const peers_details =
         Peers::details->Get(package->header.source_ip);
     if (peers_details == nullptr) { return; }
