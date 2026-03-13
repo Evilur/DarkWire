@@ -16,9 +16,7 @@ struct TransferData final {
         unsigned int source_ip;
         unsigned int destination_ip;
     } __attribute__((packed)) header;
-    struct {
-        char buffer[UDPSocket::MTU - sizeof(header)];
-    } __attribute__((packed)) payload;
+    char data[UDPSocket::MTU - sizeof(header)];
 
     explicit TransferData(Nonce& nonce,
                           unsigned int destination_ip,
@@ -34,5 +32,5 @@ FORCE_INLINE TransferData::TransferData(Nonce& nonce,
     nonce.Copy(header.nonce);
     header.source_ip = local_ip.Netb();
     header.destination_ip = destination_ip;
-    memcpy(payload.buffer, buffer, (unsigned long)buffer_size);
+    memcpy(data, buffer, (unsigned long)buffer_size);
 }

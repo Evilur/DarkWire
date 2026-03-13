@@ -153,13 +153,13 @@ FORCE_INLINE void Client::RunHandshakeLoop() {
         /* Get the chained ChaCha20 key */
         hkdf(Server::chain_key, nullptr, shared);
 
-        /* Crypt the payload */
+        /* Crypt the data */
         unsigned long long dummy_len;
         crypto_aead_chacha20poly1305_ietf_encrypt(
-            (unsigned char*)(void*)&request.payload,
+            (unsigned char*)(void*)&request.data,
             &dummy_len,
-            (unsigned char*)(void*)&request.payload,
-            sizeof(request.payload),
+            (unsigned char*)(void*)&request.data,
+            sizeof(request.data),
             (unsigned char*)(void*)&request.header,
             sizeof(request.header),
             nullptr,
@@ -266,11 +266,11 @@ noexcept {
     TransferData package(*nonce, destination_netb, buffer, buffer_size);
 
     /* Encrypt the package */
-    unsigned long long payload_size;
+    unsigned long long data_size;
     crypto_aead_chacha20poly1305_ietf_encrypt(
-        (unsigned char*)(void*)&package.payload,
-        &payload_size,
-        (unsigned char*)(void*)&package.payload,
+        (unsigned char*)(void*)&package.data,
+        &data_size,
+        (unsigned char*)(void*)&package.data,
         (unsigned long long)buffer_size,
         (unsigned char*)(void*)&package.header,
         sizeof(package.header),
@@ -281,7 +281,7 @@ noexcept {
 
     /* Send the encrypted message */
     main_socket.Send((char*)(void*)&package,
-                     sizeof(package.header) + payload_size,
+                     (long)(sizeof(package.header) + data_size),
                      endpoint);
 }
 
@@ -314,14 +314,14 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
     }
     hkdf(Server::chain_key, Server::chain_key, shared);
 
-    /* Decrypt the payload */
+    /* Decrypt the data */
     unsigned long long dummy_len;
     if (crypto_aead_chacha20poly1305_ietf_decrypt(
-        (unsigned char*)(void*)&package->payload,
+        (unsigned char*)(void*)&package->data,
         &dummy_len,
         nullptr,
-        (unsigned char*)(void*)&package->payload,
-        sizeof(package->payload) + sizeof(package->poly1305_tag),
+        (unsigned char*)(void*)&package->data,
+        sizeof(package->data) + sizeof(package->poly1305_tag),
         (unsigned char*)(void*)&package->header,
         sizeof(package->header),
         package->header.nonce,
@@ -334,8 +334,8 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
     /* If there is the first handshake */
     if (!tun->IsUp()) {
         /* Set the ip and the netmask */
-        local_ip.SetNetb(package->payload.local_ip);
-        netmask = package->payload.netmask;
+        local_ip.SetNetb(package->data.local_ip);
+        netmask = package->data.netmask;
 
         /* Calculate net-specific variables */
         calc_net();
@@ -345,14 +345,14 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
     }
 
     /* Save the server's local ip */
-    Server::local_ip_netb = package->payload.server_local_ip;
+    Server::local_ip_netb = package->data.server_local_ip;
 
     /* Add the server to the peers list */
     {
         /* Try to get the server from the peers dictionary */
         std::unique_lock details_lock(Peers::details_mutex);
         Peers::Details* const server_details =
-            Peers::details->Get(package->payload.server_local_ip);
+            Peers::details->Get(package->data.server_local_ip);
 
         /* If there is no server in the peers dictionary */
         if (server_details == nullptr) {
@@ -366,7 +366,7 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
                    crypto_aead_chacha20poly1305_ietf_KEYBYTES);
 
             /* Put the new data to the lists dictionary */
-            Peers::details->Put(package->payload.server_local_ip,
+            Peers::details->Put(package->data.server_local_ip,
                                 std::move(details));
         /* Otherwise, update the existing details */
         } else {
@@ -398,12 +398,12 @@ FORCE_INLINE void Client::HandleTransferData(
     if (peers_details == nullptr) { return; }
 
     /* Try to decrypt the package */
-    unsigned long long buffer_size;
+    unsigned long long data_size;
     if (crypto_aead_chacha20poly1305_ietf_decrypt(
-        (unsigned char*)(void*)&package->payload,
-        &buffer_size,
+        (unsigned char*)(void*)&package->data,
+        &data_size,
         nullptr,
-        (unsigned char*)(void*)&package->payload,
+        (unsigned char*)(void*)&package->data,
         package_size - sizeof(package->header),
         (unsigned char*)(void*)&package->header,
         sizeof(package->header),
@@ -415,5 +415,5 @@ FORCE_INLINE void Client::HandleTransferData(
     }
 
     /* Write the package to the tun */
-    tun->Write(package->payload.buffer, (unsigned int)buffer_size);
+    tun->Write(package->data, (unsigned int)data_size);
 }

@@ -126,11 +126,11 @@ noexcept {
                          buffer_size);
 
     /* Encrypt the package */
-    unsigned long long payload_size;
+    unsigned long long data_size;
     crypto_aead_chacha20poly1305_ietf_encrypt(
-        (unsigned char*)(void*)&package.payload,
-        &payload_size,
-        (unsigned char*)(void*)&package.payload,
+        (unsigned char*)(void*)&package.data,
+        &data_size,
+        (unsigned char*)(void*)&package.data,
         (unsigned long long)buffer_size,
         (unsigned char*)(void*)&package.header,
         sizeof(package.header),
@@ -142,7 +142,7 @@ noexcept {
 
     /* Send the encrypted message */
     main_socket.Send((char*)(void*)&package,
-                     sizeof(package.header) + payload_size,
+                     (long)(sizeof(package.header) + data_size),
                      details->endpoint);
 }
 
@@ -193,7 +193,7 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     /* Buffer for the chained key */
     unsigned char chain_key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
 
-    /* Decrypt the request payload */
+    /* Decrypt the request data */
     {
         /* Compute the first shared secret */
         unsigned char shared[crypto_scalarmult_BYTES];
@@ -211,11 +211,11 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
         /* Decrypt the message */
         unsigned long long dummy_len;
         if (crypto_aead_chacha20poly1305_ietf_decrypt(
-            (unsigned char*)(void*)&package->payload,
+            (unsigned char*)(void*)&package->data,
             &dummy_len,
             nullptr,
-            (unsigned char*)(void*)&package->payload,
-            sizeof(package->payload) + sizeof(package->poly1305_tag),
+            (unsigned char*)(void*)&package->data,
+            sizeof(package->data) + sizeof(package->poly1305_tag),
             (unsigned char*)(void*)&package->header,
             sizeof(package->header),
             package->header.nonce,
@@ -231,7 +231,7 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
         /* Try to find such a static key in the allowed peers linked list */
         bool is_allowed = false;
         for (const unsigned char* public_key : *Peers::public_keys)
-            if (memcmp(package->payload.static_public_key,
+            if (memcmp(package->data.static_public_key,
                        public_key,
                        crypto_scalarmult_BYTES) == 0)
                 is_allowed = true;
@@ -245,7 +245,7 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     {
         /* Get the current time */
         unsigned long current_time = (unsigned long)std::time(nullptr);
-        unsigned long client_timestamp = package->payload.timestamp;
+        unsigned long client_timestamp = package->data.timestamp;
 
         /* Get the delta time */
         unsigned long delta_time = current_time > client_timestamp
@@ -257,7 +257,7 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
 
         /* Get the last timestamp for such a key */
         unsigned long* const last_timestamp =
-            Peers::timestamps->Get(package->payload.static_public_key);
+            Peers::timestamps->Get(package->data.static_public_key);
 
         /* Compare current timestamp with the last one */
         if (client_timestamp <= *last_timestamp) return;
@@ -267,8 +267,8 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     }
 
     /* Variables for the response (default is data from the request) */
-    unsigned int response_ip = package->payload.ip;
-    unsigned char response_netmask = package->payload.netmask;
+    unsigned int response_ip = package->data.ip;
+    unsigned char response_netmask = package->data.netmask;
 
     /* Handle the local ip address and netmask */
     {
@@ -280,7 +280,7 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
         std::unique_lock details_lock(Peers::details_mutex);
         for (const auto& [ip, details] : *Peers::details)
             if (equal((KeyBuffer)details.static_public_key,
-                      (KeyBuffer)package->payload.static_public_key)) {
+                      (KeyBuffer)package->data.static_public_key)) {
             Peers::details->Delete(ip);
             break;
         }
@@ -344,7 +344,7 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     /* Compute the third shared secret and update the chain keys */
     if (crypto_scalarmult(shared,
                           ephemeral_keys.Secret(),
-                          package->payload.static_public_key) == -1) {
+                          package->data.static_public_key) == -1) {
         ERROR_LOG("crypto_scalarmult: Failed to compute the shared secret");
         return;
     }
@@ -360,7 +360,7 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
         };
         std::unique_lock details_lock(Peers::details_mutex);
         memcpy(details.static_public_key,
-               package->payload.static_public_key,
+               package->data.static_public_key,
                crypto_scalarmult_BYTES);
         memcpy(details.chain_key,
                chain_key,
@@ -377,10 +377,10 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     /* Encrypt the resposne */
     unsigned long long dummy_len;
     crypto_aead_chacha20poly1305_ietf_encrypt(
-        (unsigned char*)(void*)&response.payload,
+        (unsigned char*)(void*)&response.data,
         &dummy_len,
-        (unsigned char*)(void*)&response.payload,
-        sizeof(response.payload),
+        (unsigned char*)(void*)&response.data,
+        sizeof(response.data),
         (unsigned char*)(void*)&response.header,
         sizeof(response.header),
         nullptr,
@@ -415,12 +415,12 @@ FORCE_INLINE void Server::HandleTransferData(
         if (peers_details == nullptr) { return; }
 
         /* Decrypt the package */
-        unsigned long long buffer_size;
+        unsigned long long data_size;
         if (crypto_aead_chacha20poly1305_ietf_decrypt(
-            (unsigned char*)(void*)&package->payload,
-            &buffer_size,
+            (unsigned char*)(void*)&package->data,
+            &data_size,
             nullptr,
-            (unsigned char*)(void*)&package->payload,
+            (unsigned char*)(void*)&package->data,
             package_size - sizeof(package->header),
             (unsigned char*)(void*)&package->header,
             sizeof(package->header),
@@ -432,12 +432,12 @@ FORCE_INLINE void Server::HandleTransferData(
         }
 
         /* Get the real destination address */
-        destination_netb = ((iphdr*)(void*)&package->payload)->daddr;
+        destination_netb = ((iphdr*)(void*)&package->data)->daddr;
 
         /* If we need to write the package to the TUN */
         if ((destination_netb & binmask.Netb()) != network_prefix.Netb() ||
             destination_netb == local_ip.Netb()) {
-            tun->Write(package->payload.buffer, (unsigned int)buffer_size);
+            tun->Write(package->data, (unsigned int)data_size);
             return;
         }
 
@@ -456,10 +456,10 @@ FORCE_INLINE void Server::HandleTransferData(
 
         /* Encrypt the package */
         crypto_aead_chacha20poly1305_ietf_encrypt(
-            (unsigned char*)(void*)&package->payload,
-            &buffer_size,
-            (unsigned char*)(void*)&package->payload,
-            buffer_size,
+            (unsigned char*)(void*)&package->data,
+            &data_size,
+            (unsigned char*)(void*)&package->data,
+            data_size,
             (unsigned char*)(void*)&package->header,
             sizeof(package->header),
             nullptr,

@@ -17,7 +17,7 @@ struct HandshakeResponse final {
         unsigned int local_ip;
         unsigned char netmask;
         unsigned int server_local_ip;
-    } __attribute__((packed)) payload;
+    } __attribute__((packed)) data;
     unsigned char poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
     HandshakeResponse(const unsigned char* epk,
@@ -42,9 +42,9 @@ FORCE_INLINE HandshakeResponse::HandshakeResponse(
     nonce.Copy(header.nonce);
 
     /* Set the local ip and the netmask */
-    payload.local_ip = response_local_ip;
-    payload.netmask = response_netmask;
+    data.local_ip = response_local_ip;
+    data.netmask = response_netmask;
 
     /* Set the server's local ip */
-    payload.server_local_ip = local_ip.Netb();
+    data.server_local_ip = local_ip.Netb();
 }

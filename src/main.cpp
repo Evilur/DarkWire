@@ -297,7 +297,7 @@ static int handle_config(const char* const name) {
     }
 
     /* Check the MTU */
-    constexpr int INNER_MTU = sizeof(TransferData::payload) -
+    constexpr int INNER_MTU = sizeof(TransferData::data) -
                               crypto_aead_chacha20poly1305_ietf_ABYTES;
     if (Config::Interface::mtu > INNER_MTU) {
         FATAL_LOG("MTU can not be more than %d", INNER_MTU);

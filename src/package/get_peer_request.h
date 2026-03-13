@@ -13,7 +13,7 @@ struct GetPeerRequest final {
     } __attribute__((packed)) header;
     struct {
         unsigned int peer_ip;
-    } __attribute__((packed)) payload;
+    } __attribute__((packed)) data;
     unsigned char poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
     GetPeerRequest(unsigned int peer_ip, Nonce& nonce) noexcept;
@@ -28,5 +28,5 @@ FORCE_INLINE GetPeerRequest::GetPeerRequest(const unsigned int peer_ip,
     nonce.Copy(header.nonce);
 
     /* Set the peer's ip */
-    payload.peer_ip = peer_ip;
+    data.peer_ip = peer_ip;
 }

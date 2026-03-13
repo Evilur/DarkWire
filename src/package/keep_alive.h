@@ -9,13 +9,13 @@
 struct KeepAlive final {
     struct {
         PackageType type;
-        char buffer[5];
     } __attribute__((packed)) header;
+    char data[5];
 
     explicit KeepAlive() noexcept;
 } __attribute__((packed));
 
 FORCE_INLINE KeepAlive::KeepAlive() noexcept {
     header.type = KEEPALIVE;
-    memcpy(header.buffer, "ALIVE", 5);
+    memcpy(data, "ALIVE", 5);
 }

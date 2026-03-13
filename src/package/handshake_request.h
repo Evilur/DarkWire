@@ -21,7 +21,7 @@ struct HandshakeRequest final {
         unsigned long timestamp;
         unsigned int ip;
         unsigned char netmask;
-    } __attribute__((packed)) payload;
+    } __attribute__((packed)) data;
     unsigned char poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
     explicit HandshakeRequest(const unsigned char* epk, Nonce& nonce) noexcept;
@@ -34,7 +34,7 @@ FORCE_INLINE HandshakeRequest::HandshakeRequest(const unsigned char* const epk,
 
     /* Copy the public keys */
     memcpy(header.ephemeral_public_key, epk, crypto_scalarmult_BYTES);
-    memcpy(payload.static_public_key,
+    memcpy(data.static_public_key,
            static_keys->Public(),
            crypto_scalarmult_BYTES);
 
@@ -42,9 +42,9 @@ FORCE_INLINE HandshakeRequest::HandshakeRequest(const unsigned char* const epk,
     nonce.Copy(header.nonce);
 
     /* Set the timestampt */
-    payload.timestamp = (unsigned long)std::time(nullptr);
+    data.timestamp = (unsigned long)std::time(nullptr);
 
     /* Set the ip and netmask */
-    payload.ip = local_ip.Netb();
-    payload.netmask = netmask;
+    data.ip = local_ip.Netb();
+    data.netmask = netmask;
 }
