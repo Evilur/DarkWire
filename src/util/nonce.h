@@ -4,6 +4,7 @@
 #include "util/macro.h"
 
 #include <cstring>
+#include <mutex>
 #include <sodium.h>
 
 /**
@@ -25,6 +26,8 @@ public:
 private:
     enum : char { INCREMENT, DECREMENT } _mode;
     unsigned char _nonce[crypto_aead_chacha20poly1305_ietf_NPUBBYTES];
+
+    std::mutex _mutex;
 };
 
 FORCE_INLINE Nonce::Nonce() noexcept : _mode(INCREMENT) {
@@ -37,6 +40,7 @@ noexcept : _mode(DECREMENT) {
 }
 
 FORCE_INLINE void Nonce::Copy(unsigned char* buffer) noexcept {
+    std::lock_guard lock(_mutex);
     if (_mode == INCREMENT) {
         for (unsigned char i = crypto_aead_chacha20poly1305_ietf_NPUBBYTES - 1;
              i >= 0; --i) if (++_nonce[i] != 0) break;
