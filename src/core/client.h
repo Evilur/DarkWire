@@ -247,13 +247,14 @@ noexcept {
             nonce = details->nonce;
             /* If there is no such an ip in the dictionary */
         } else {
+            /* Try to get the peer from the server */
+            if ((destination_netb & binmask.Netb()) == network_prefix.Netb())
+                DEBUG_LOG("OK");
+
             endpoint = Server::endpoint;
             key = Server::chain_key;
             nonce = Server::nonce;
-            destination_netb = INADDR_ANY;
-
-            /* TODO */
-            /* Get the peer from the server */
+            destination_netb = Server::local_ip_netb;
         }
     }
 

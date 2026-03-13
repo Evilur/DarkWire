@@ -76,6 +76,7 @@ FORCE_INLINE void TUN::Up() noexcept {
     for (const String& command : Config::Interface::pre_up)
         System::Exec(command);
 
+    /* Up the interface */
     System::Exec(String::Format("ip addr add %s/%hhu dev %s",
                                 inet_ntoa({ local_ip.Netb() }),
                                 netmask,

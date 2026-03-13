@@ -404,10 +404,10 @@ FORCE_INLINE void Server::HandleTransferData(
               ntohs(from.sin_port));
 
     /* Get the destination IP address */
-    const unsigned int destination_netb = package->header.destination_ip;
+    unsigned int destination_netb = package->header.destination_ip;
 
     /* If we need to decrypt the package */
-    if (destination_netb == INADDR_ANY || destination_netb == local_ip.Netb()) {
+    if (destination_netb == local_ip.Netb()) {
         /* Try to get the key to decrypt the package */
         std::shared_lock details_lock(Peers::details_mutex);
         const Peers::Details* const peers_details =
@@ -430,61 +430,62 @@ FORCE_INLINE void Server::HandleTransferData(
             WARN_LOG("Forged message found");
             return;
         }
-        details_lock.unlock();
+
+        /* Get the real destination address */
+        destination_netb = ((iphdr*)(void*)&package->payload)->daddr;
+
+        /* If we need to write the package to the TUN */
+        if ((destination_netb & binmask.Netb()) != network_prefix.Netb() ||
+            destination_netb == local_ip.Netb()) {
+            tun->Write(package->payload.buffer, (unsigned int)buffer_size);
+            return;
+        }
 
         /* If we need to resend the package to the other peer */
-        if (destination_netb == INADDR_ANY) {
-            /* Try to get the peer from the dictionary */
-            Peers::Details* const peer_details =
-                Peers::details->Get(((iphdr*)(void*)&package->payload)->daddr);
-            if (peer_details == nullptr) return;
+        Peers::Details* const peer_details =
+            Peers::details->Get(destination_netb);
+        if (peer_details == nullptr) return;
 
-            TRACE_LOG("Resend the package to the %s:%hu",
-                      inet_ntoa(peer_details->endpoint.sin_addr),
-                      ntohs(peer_details->endpoint.sin_port));
+        TRACE_LOG("Resend the package to the %s:%hu",
+                  inet_ntoa(peer_details->endpoint.sin_addr),
+                  ntohs(peer_details->endpoint.sin_port));
 
-            /* Update the nonce and the source ip */
-            peer_details->nonce->Copy(package->header.nonce);
-            package->header.source_ip = local_ip.Netb();
+        /* Update the nonce and the source ip */
+        peer_details->nonce->Copy(package->header.nonce);
+        package->header.source_ip = local_ip.Netb();
 
+        /* Encrypt the package */
+        crypto_aead_chacha20poly1305_ietf_encrypt(
+            (unsigned char*)(void*)&package->payload,
+            &buffer_size,
+            (unsigned char*)(void*)&package->payload,
+            buffer_size,
+            (unsigned char*)(void*)&package->header,
+            sizeof(package->header),
+            nullptr,
+            package->header.nonce,
+            peer_details->chain_key
+        );
 
-            /* Encrypt the package */
-            crypto_aead_chacha20poly1305_ietf_encrypt(
-                (unsigned char*)(void*)&package->payload,
-                &buffer_size,
-                (unsigned char*)(void*)&package->payload,
-                buffer_size,
-                (unsigned char*)(void*)&package->header,
-                sizeof(package->header),
-                nullptr,
-                package->header.nonce,
-                peer_details->chain_key
-            );
-
-            /* Send the encrypted package */
-            main_socket.Send((char*)(void*)package,
-                             package_size,
-                             peer_details->endpoint);
-        } else {
-            /* Write the decrypted package to the TUN */
-            tun->Write(package->payload.buffer, (unsigned int)buffer_size);
-        }
-        return;
-    }
-
+        /* Send the encrypted package */
+        main_socket.Send((char*)(void*)package,
+                         package_size,
+                         peer_details->endpoint);
     /* If we need to transit the package */
-    /* Try to get the peer endpoint */
-    std::shared_lock details_lock(Peers::details_mutex);
-    const Peers::Details* const peer_details =
-        Peers::details->Get(destination_netb);
-    if (peer_details == nullptr) return;
+    } else {
+        /* Try to get the peer endpoint */
+        std::shared_lock details_lock(Peers::details_mutex);
+        const Peers::Details* const peer_details =
+            Peers::details->Get(destination_netb);
+        if (peer_details == nullptr) return;
 
-    TRACE_LOG("Transit the package to the %s:%hu",
-              inet_ntoa(peer_details->endpoint.sin_addr),
-              ntohs(peer_details->endpoint.sin_port));
+        TRACE_LOG("Transit the package to the %s:%hu",
+                  inet_ntoa(peer_details->endpoint.sin_addr),
+                  ntohs(peer_details->endpoint.sin_port));
 
-    /* Send the package to the peer */
-    main_socket.Send((char*)(void*)package,
-                     package_size,
-                     peer_details->endpoint);
+        /* Send the package to the peer */
+        main_socket.Send((char*)(void*)package,
+                         package_size,
+                         peer_details->endpoint);
+    }
 }
