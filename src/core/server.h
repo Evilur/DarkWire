@@ -35,8 +35,8 @@ public:
 
     static void RunHandlePackagesLoop() noexcept;
 
-    static void HandleTunPackage(const char* buffer,
-                                 int buffer_size,
+    static void HandleTunPackage(TransferData& package,
+                                 int package_size,
                                  unsigned int destination_netb) noexcept;
 
 private:
@@ -110,20 +110,17 @@ FORCE_INLINE void Server::Init() {
     Peers::details->Put(local_ip.Netb(), { .nonce = nullptr });
 }
 
-FORCE_INLINE void Server::HandleTunPackage(const char* const buffer,
-                                     const int buffer_size,
-                                     const unsigned int destination_netb)
+FORCE_INLINE void Server::HandleTunPackage(TransferData& package,
+                                           const int package_size,
+                                           const unsigned int destination_netb)
 noexcept {
     /* Try to get the peers details */
     std::shared_lock details_lock(Peers::details_mutex);
     Peers::Details* const details = Peers::details->Get(destination_netb);
     if (details == nullptr) return;
 
-    /* Create the response */
-    TransferData package(*details->nonce,
-                         destination_netb,
-                         buffer,
-                         buffer_size);
+    /* Update the package header */
+    package.UpdateHeader(details->nonce, destination_netb);
 
     /* Encrypt the package */
     unsigned long long data_size;
@@ -131,7 +128,7 @@ noexcept {
         (unsigned char*)(void*)&package.data,
         &data_size,
         (unsigned char*)(void*)&package.data,
-        (unsigned long long)buffer_size,
+        (unsigned long long)package_size,
         (unsigned char*)(void*)&package.header,
         sizeof(package.header),
         nullptr,
@@ -160,7 +157,7 @@ FORCE_INLINE void Server::RunHandlePackagesLoop() noexcept {
         if (buffer_size == -1) continue;
 
         /* Get the type of the package */
-        const unsigned char raw_type = *(const unsigned char*)buffer;
+        const unsigned char raw_type = *(unsigned char*)buffer;
         if (raw_type > TRANSFER_DATA) return;
         const PackageType type = (PackageType)raw_type;
 
@@ -370,7 +367,7 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
 
     /* Assemble the response */
     HandshakeResponse response(ephemeral_keys.Public(),
-                               *nonce,
+                               nonce,
                                response_ip,
                                response_netmask);
 
@@ -453,6 +450,8 @@ FORCE_INLINE void Server::HandleTransferData(
         /* Update the nonce and the source ip */
         peer_details->nonce->Copy(package->header.nonce);
         package->header.source_ip = local_ip.Netb();
+        /* Update the package header */
+        package->UpdateHeader(peer_details->nonce, destination_netb);
 
         /* Encrypt the package */
         crypto_aead_chacha20poly1305_ietf_encrypt(

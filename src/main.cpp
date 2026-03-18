@@ -355,13 +355,13 @@ static int run_client() {
 
     /* Handle incoming packages from the TUN */
     const unsigned int MTU = (unsigned int)Config::Interface::mtu;
-    char* buffer = new char[MTU];
+    TransferData package;
     for (;;) {
         /* Read the package to the buffer from the TUN */
-        const int package_size = tun->Read(buffer, MTU);
+        const int package_size = tun->Read(package.data, MTU);
 
         /* Cast the buffer to the ip header struct */
-        const iphdr* const ip_header = (const iphdr*)(const void*)buffer;
+        const iphdr* const ip_header = (iphdr*)(void*)package.data;
 
         /* Get the destination ip */
         NetAddr destinastion; destinastion.SetNetb(ip_header->daddr);
@@ -375,7 +375,7 @@ static int run_client() {
         if (destinastion.Hostb() == broadcast.Hostb()) continue;
 
         /* Handle the TUN package */
-        Client::HandleTunPackage(buffer, package_size, destinastion.Netb());
+        Client::HandleTunPackage(package, package_size, destinastion.Netb());
     }
 
     return -1;
@@ -393,16 +393,17 @@ static int run_server() {
 
     /* Handle incoming packages from the TUN */
     const unsigned int MTU = (unsigned int)Config::Interface::mtu;
-    char* buffer = new char[MTU];
+    TransferData package;
     for (;;) {
         /* Read the package to the buffer from the TUN */
-        const int package_size = tun->Read(buffer, MTU);
+        const int package_size = tun->Read(package.data, MTU);
 
         /* Cast the buffer to the ip header struct */
-        const iphdr* const ip_header = (const iphdr*)(const void*)buffer;
+        const iphdr* const ip_header = (iphdr*)(void*)package.data;
 
         /* Get the destination ip */
-        NetAddr destinastion; destinastion.SetNetb(ip_header->daddr);
+        NetAddr destinastion;
+        destinastion.SetNetb(ip_header->daddr);
 
         /* Drop multicasts */
         if (destinastion.Hostb() >= 0xe0000000 &&
@@ -413,7 +414,7 @@ static int run_server() {
         if (destinastion.Hostb() == broadcast.Hostb()) continue;
 
         /* Handle the TUN package */
-        Server::HandleTunPackage(buffer, package_size, destinastion.Netb());
+        Server::HandleTunPackage(package, package_size, destinastion.Netb());
     }
 
     return -1;

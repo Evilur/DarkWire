@@ -40,8 +40,8 @@ public:
 
     static void RunKeepAliveLoop() noexcept;
 
-    static void HandleTunPackage(const char* buffer,
-                                 int buffer_size,
+    static void HandleTunPackage(TransferData& package,
+                                 int package_size,
                                  unsigned int destination_netb) noexcept;
 
 private:
@@ -138,7 +138,7 @@ FORCE_INLINE void Client::RunHandshakeLoop() {
 
         /* Fill the request */
         HandshakeRequest request(Server::ephemeral_keys->Public(),
-                                 *Server::nonce);
+                                 Server::nonce);
 
         /* Compute the first shared secret */
         unsigned char shared[crypto_scalarmult_BYTES];
@@ -226,9 +226,9 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
     }
 }
 
-FORCE_INLINE void Client::HandleTunPackage(const char* const buffer,
-                                     const int buffer_size,
-                                     unsigned int destination_netb)
+FORCE_INLINE void Client::HandleTunPackage(TransferData& package,
+                                           const int package_size,
+                                           unsigned int destination_netb)
 noexcept {
     /* Init endpoint, key and nonce variables */
     sockaddr_in endpoint;
@@ -262,8 +262,8 @@ noexcept {
               inet_ntoa(endpoint.sin_addr),
               ntohs(endpoint.sin_port));
 
-    /* Assemble the transfer data package */
-    TransferData package(*nonce, destination_netb, buffer, buffer_size);
+    /* Update the package header */
+    package.UpdateHeader(nonce, destination_netb);
 
     /* Encrypt the package */
     unsigned long long data_size;
@@ -271,7 +271,7 @@ noexcept {
         (unsigned char*)(void*)&package.data,
         &data_size,
         (unsigned char*)(void*)&package.data,
-        (unsigned long long)buffer_size,
+        (unsigned long long)package_size,
         (unsigned char*)(void*)&package.header,
         sizeof(package.header),
         nullptr,
