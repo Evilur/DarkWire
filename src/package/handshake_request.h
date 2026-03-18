@@ -24,11 +24,11 @@ struct HandshakeRequest final {
     } __attribute__((packed)) data;
     unsigned char poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
-    explicit HandshakeRequest(const unsigned char* epk, Nonce& nonce) noexcept;
+    explicit HandshakeRequest(const unsigned char* epk, Nonce* nonce) noexcept;
 } __attribute__((packed));
 
 FORCE_INLINE HandshakeRequest::HandshakeRequest(const unsigned char* const epk,
-                                                Nonce& nonce) noexcept {
+                                                Nonce* const nonce) noexcept {
     /* Set the type */
     header.type = HANDSHAKE_REQUEST;
 
@@ -39,7 +39,7 @@ FORCE_INLINE HandshakeRequest::HandshakeRequest(const unsigned char* const epk,
            crypto_scalarmult_BYTES);
 
     /* Set the nonce */
-    nonce.Copy(header.nonce);
+    nonce->Copy(header.nonce);
 
     /* Set the timestampt */
     data.timestamp = (unsigned long)std::time(nullptr);

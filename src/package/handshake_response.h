@@ -21,14 +21,14 @@ struct HandshakeResponse final {
     unsigned char poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
     HandshakeResponse(const unsigned char* epk,
-                      Nonce& nonce,
+                      Nonce* nonce,
                       unsigned int response_local_ip,
                       unsigned char response_netmask) noexcept;
 } __attribute__((packed));
 
 FORCE_INLINE HandshakeResponse::HandshakeResponse(
     const unsigned char* const epk,
-    Nonce& nonce,
+    Nonce* const nonce,
     const unsigned int response_local_ip,
     const unsigned char response_netmask
 ) noexcept {
@@ -39,7 +39,7 @@ FORCE_INLINE HandshakeResponse::HandshakeResponse(
     memcpy(header.ephemeral_public_key, epk, crypto_scalarmult_BYTES);
 
     /* Set the nonce */
-    nonce.Copy(header.nonce);
+    nonce->Copy(header.nonce);
 
     /* Set the local ip and the netmask */
     data.local_ip = response_local_ip;

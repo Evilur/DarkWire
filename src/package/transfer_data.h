@@ -6,7 +6,6 @@
 #include "util/macro.h"
 #include "util/nonce.h"
 
-#include <cstring>
 #include <sodium.h>
 
 struct TransferData final {
@@ -18,19 +17,24 @@ struct TransferData final {
     } __attribute__((packed)) header;
     char data[UDPSocket::MTU - sizeof(header)];
 
-    explicit TransferData(Nonce& nonce,
-                          unsigned int destination_ip,
-                          const char* buffer,
-                          int buffer_size) noexcept;
+    TransferData() noexcept;
+
+    void UpdateHeader(Nonce* nonce, unsigned int destination_ip) noexcept;
 } __attribute__((packed));
 
-FORCE_INLINE TransferData::TransferData(Nonce& nonce,
-                                        const unsigned int destination_ip,
-                                        const char* const buffer,
-                                        const  int buffer_size) noexcept {
+FORCE_INLINE TransferData::TransferData() noexcept {
     header.type = TRANSFER_DATA;
-    nonce.Copy(header.nonce);
+}
+
+FORCE_INLINE void TransferData::UpdateHeader(Nonce* const nonce,
+                                             const unsigned int destination_ip)
+noexcept {
+    /* Copy the nonce */
+    nonce->Copy(header.nonce);
+
+    /* Update the source ip */
     header.source_ip = local_ip.Netb();
+
+    /* Set the destination ip */
     header.destination_ip = destination_ip;
-    memcpy(data, buffer, (unsigned long)buffer_size);
 }
