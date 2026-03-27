@@ -172,7 +172,7 @@ FORCE_INLINE void Server::RunHandlePackagesLoop() noexcept {
 #define HANDLE_PACKAGE(T)                                                     \
         {                                                                     \
             T* const package = (T*)(void*)buffer;                             \
-            Handle##T(package, (uint32_t)buffer_size, from);              \
+            Handle##T(package, (uint32_t)buffer_size, from);                  \
             continue;                                                         \
         }
 
@@ -438,6 +438,7 @@ FORCE_INLINE void Server::HandleTransferData(
             return;
         }
 
+        /* Get the package timestamp */
         uint64_t package_timestamp = package->header.timestamp;
 
         /* Check the endpoint */

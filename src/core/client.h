@@ -70,8 +70,8 @@ private:
                                  uint8_t>* details = nullptr;
         static inline std::shared_mutex details_mutex;
         static inline Dictionary<uint32_t,
-                                 char,
-                                 uint8_t>* hole_punching = nullptr;
+                                 uint8_t,
+                                 uint8_t>* ping_response_numbers = nullptr;
         static inline std::mutex hole_punching_mutex;
     };
 
@@ -120,9 +120,9 @@ FORCE_INLINE void Client::Init() {
     Peers::details = new Dictionary<uint32_t,
                                     Peers::Details,
                                     uint8_t>(16);
-    Peers::hole_punching = new Dictionary<uint32_t,
-                                          char,
-                                          uint8_t>(16);
+    Peers::ping_response_numbers = new Dictionary<uint32_t,
+                                                  uint8_t,
+                                                  uint8_t>(16);
 }
 
 FORCE_INLINE void Client::RunHandshakeLoop() {
@@ -264,8 +264,8 @@ noexcept {
                 std::lock_guard hole_punching_lock(Peers::hole_punching_mutex);
                 if ((destination_netb & binmask.Netb()) ==
                     network_prefix.Netb() &&
-                    !Peers::hole_punching->Has(destination_netb)) {
-                    Peers::hole_punching->Put(destination_netb, -1);
+                    !Peers::ping_response_numbers->Has(destination_netb)) {
+                    Peers::ping_response_numbers->Put(destination_netb, -1);
                     std::thread(GetPeerFromServer, destination_netb).detach();
                 }
             }
@@ -439,29 +439,28 @@ FORCE_INLINE void Client::HandleTransferData(
 
 FORCE_INLINE void Client::GetPeerFromServer(const uint32_t ip_netb)
 noexcept {
-    std::unique_lock hole_punching_lock(Peers::hole_punching_mutex);
+    std::shared_lock details_lock(Peers::details_mutex);
     do {
+        INFO_LOG("Sending a get peer package for %s", inet_ntoa({ ip_netb }));
+
         /* Assemble the package */
-        hole_punching_lock.unlock();
+        details_lock.unlock();
         std::unique_lock server_lock(Server::mutex);
-        GetPeerRequest package(ip_netb, Server::nonce);
+        GetPeerRequest package(Server::nonce, ip_netb);
 
         /* Encrypt the package */
         unsigned long long data_size;
-        if (crypto_aead_chacha20poly1305_ietf_decrypt(
+        crypto_aead_chacha20poly1305_ietf_encrypt(
             (uint8_t*)(void*)&package.data,
             &data_size,
-            nullptr,
             (uint8_t*)(void*)&package.data,
-            sizeof(ip_netb),
+            sizeof(package.data),
             (uint8_t*)(void*)&package.header,
             sizeof(package.header),
+            nullptr,
             package.header.nonce,
             Server::chain_key
-        ) != 0) {
-            WARN_LOG("Forged message found");
-            return;
-        }
+        );
         server_lock.unlock();
 
         /* Send the encrypted message */
@@ -471,6 +470,6 @@ noexcept {
 
         /* Wait for 6 seconds and retry */
         usleep(6 * 1000 * 1000);
-        hole_punching_lock.lock();
-    } while (*Peers::hole_punching->Get(ip_netb) == -1);
+        details_lock.lock();
+    } while (!Peers::details->Has(ip_netb));
 }

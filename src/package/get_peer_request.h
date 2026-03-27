@@ -18,11 +18,11 @@ struct GetPeerRequest final {
     } __attribute__((packed)) data;
     uint8_t poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
-    GetPeerRequest(uint32_t peer_ip, Nonce* nonce) noexcept;
+    GetPeerRequest(Nonce* nonce, uint32_t peer_ip) noexcept;
 } __attribute__((packed));
 
-FORCE_INLINE GetPeerRequest::GetPeerRequest(const uint32_t peer_ip,
-                                            Nonce* const nonce) noexcept {
+FORCE_INLINE GetPeerRequest::GetPeerRequest(Nonce* const nonce,
+                                            const uint32_t peer_ip) noexcept {
     /* Set the package type */
     header.type = GET_PEER_REQUEST;
 
