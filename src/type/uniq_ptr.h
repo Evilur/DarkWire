@@ -2,6 +2,8 @@
 
 #include "util/macro.h"
 
+#include <cstdint>
+
 template <typename T>
 inline void delete_object(T* obj) noexcept;
 
@@ -63,9 +65,9 @@ class UniqPtr<T[]> final : public UniqPtrBase<T, delete_array> {
 public:
     using UniqPtrBase<T, delete_array>::UniqPtrBase;
 
-    T& operator[](unsigned long index) noexcept;
+    T& operator[](uint64_t index) noexcept;
 
-    const T& operator[](unsigned long index) const noexcept;
+    const T& operator[](uint64_t index) const noexcept;
 };
 
 template<typename T>
@@ -145,12 +147,12 @@ const T* UniqPtr<T>::operator->() const noexcept { return this->_ptr; }
 
 template<typename T>
 FORCE_INLINE
-T& UniqPtr<T[]>::operator[](const unsigned long index) noexcept {
+T& UniqPtr<T[]>::operator[](const uint64_t index) noexcept {
     return this->_ptr[index];
 }
 
 template<typename T>
 FORCE_INLINE
-const T& UniqPtr<T[]>::operator[](const unsigned long index) const noexcept {
+const T& UniqPtr<T[]>::operator[](const uint64_t index) const noexcept {
     return this->_ptr[index];
 }

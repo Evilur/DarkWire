@@ -32,25 +32,25 @@ public:
 
     void Connect(const sockaddr_in& address) const;
 
-    int Receive(char* buffer, sockaddr_in* from) const noexcept;
+    int32_t Receive(char* buffer, sockaddr_in* from) const noexcept;
 
-    int Receive(char* buffer) const noexcept;
+    int32_t Receive(char* buffer) const noexcept;
 
-    void Send(const char* buffer, long buffer_size,
+    void Send(const char* buffer, int64_t buffer_size,
               const sockaddr_in& address) const noexcept;
 
-    void Send(const char* buffer, long buffer_size) const noexcept;
+    void Send(const char* buffer, int64_t buffer_size) const noexcept;
 
-    void SetOption(int optname, const void* optval,
+    void SetOption(int32_t optname, const void* optval,
                    socklen_t optlen) const noexcept;
 
     void Close() noexcept;
 
 private:
-    int _socket_fd = -1;
+    int32_t _socket_fd = -1;
 
 public:
-    static constexpr int MTU = 1500;
+    static constexpr int32_t MTU = 1500;
 
     static constexpr sockaddr_in EPHEMERAL_ADDRESS = {
         .sin_family = AF_INET,
@@ -106,7 +106,7 @@ FORCE_INLINE void UDPSocket::Bind(const sockaddr_in& address) const {
     }
 
     /* Set options */
-    constexpr int reuse = 1;
+    constexpr int32_t reuse = 1;
     SetOption(SO_REUSEADDR, &reuse, sizeof(reuse));
     #ifndef _WIN64
     SetOption(SO_REUSEPORT, &reuse, sizeof(reuse));
@@ -138,11 +138,11 @@ FORCE_INLINE void UDPSocket::Connect(const sockaddr_in& address) const {
              ntohs(address.sin_port));
 }
 
-FORCE_INLINE int UDPSocket::Receive(char* buffer, sockaddr_in* from)
+FORCE_INLINE int32_t UDPSocket::Receive(char* buffer, sockaddr_in* from)
 const noexcept {
     /* Receive the data */
     socklen_t from_len = sizeof(sockaddr_in);
-    const int result = (int)recvfrom(_socket_fd, buffer, MTU, 0,
+    const int32_t result = (int32_t)recvfrom(_socket_fd, buffer, MTU, 0,
                                      (sockaddr*)from, &from_len);
 
     /* Print the log */
@@ -159,10 +159,10 @@ const noexcept {
     return result;
 }
 
-FORCE_INLINE int UDPSocket::Receive(char* buffer)
+FORCE_INLINE int32_t UDPSocket::Receive(char* buffer)
 const noexcept {
     /* Receive the data */
-    const int result = (int)recv(_socket_fd, buffer, MTU, 0);
+    const int32_t result = (int32_t)recv(_socket_fd, buffer, MTU, 0);
 
     /* Print the log */
 #if LOG_LEVEL == 0
@@ -183,11 +183,11 @@ const noexcept {
 
 FORCE_INLINE
 void UDPSocket::Send(const char* const buffer,
-                     const long buffer_size,
+                     const int64_t buffer_size,
                      const sockaddr_in& address) const noexcept {
     /* Send the data */
-    const long result = sendto(_socket_fd, buffer,
-                               (unsigned long)buffer_size, 0,
+    const int64_t result = sendto(_socket_fd, buffer,
+                               (uint64_t)buffer_size, 0,
                                (const sockaddr*)&address,
                                sizeof(sockaddr_in));
 
@@ -206,11 +206,11 @@ void UDPSocket::Send(const char* const buffer,
 }
 
 FORCE_INLINE
-void UDPSocket::Send(const char* const buffer, const long buffer_size)
+void UDPSocket::Send(const char* const buffer, const int64_t buffer_size)
 const noexcept {
     /* Send the data */
-    const long result  = send(_socket_fd, buffer,
-                              (unsigned long)buffer_size, 0);
+    const int64_t result  = send(_socket_fd, buffer,
+                              (uint64_t)buffer_size, 0);
 
 
     /* Print the log */
@@ -232,7 +232,7 @@ const noexcept {
 }
 
 FORCE_INLINE
-void UDPSocket::SetOption(const int optname, const void* const optval,
+void UDPSocket::SetOption(const int32_t optname, const void* const optval,
                           const socklen_t optlen) const noexcept {
 #ifdef _WIN64
     if (setsockopt(_socket_fd, SOL_SOCKET,
@@ -272,7 +272,7 @@ FORCE_INLINE sockaddr_in UDPSocket::GetAddress(const char* const str) {
     }
 
     /* Set the port */
-    result.sin_port = htons((unsigned short)atoi(port_ptr));
+    result.sin_port = htons((uint16_t)atoi(port_ptr));
     if (result.sin_port == 0) {
         ERROR_LOG("Invalid port");
         throw std::exception();

@@ -20,13 +20,13 @@ public:
 
     ~Keys() = default;
 
-    [[nodiscard]] const unsigned char* Secret() const noexcept;
+    [[nodiscard]] const uint8_t* Secret() const noexcept;
 
-    [[nodiscard]] const unsigned char* Public() const noexcept;
+    [[nodiscard]] const uint8_t* Public() const noexcept;
 
 private:
-    unsigned char _sk[crypto_scalarmult_SCALARBYTES];
-    unsigned char _pk[crypto_scalarmult_BYTES];
+    uint8_t _sk[crypto_scalarmult_SCALARBYTES];
+    uint8_t _pk[crypto_scalarmult_BYTES];
 };
 
 FORCE_INLINE Keys::Keys() noexcept {
@@ -48,6 +48,6 @@ FORCE_INLINE Keys::Keys(const char* const base64_secret_key) noexcept {
     crypto_scalarmult_base(_pk, _sk);
 }
 
-FORCE_INLINE const unsigned char* Keys::Secret() const noexcept { return _sk; }
+FORCE_INLINE const uint8_t* Keys::Secret() const noexcept { return _sk; }
 
-FORCE_INLINE const unsigned char* Keys::Public() const noexcept { return _pk; }
+FORCE_INLINE const uint8_t* Keys::Public() const noexcept { return _pk; }

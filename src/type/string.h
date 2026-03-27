@@ -1,6 +1,8 @@
 #pragma once
 
-#include <cstdio>
+#include "util/macro.h"
+
+#include <cstdint>
 #include <cstring>
 #include <string_view>
 
@@ -8,11 +10,11 @@ class String final {
 public:
     String() = delete;
 
-    explicit String(unsigned long str_size);
+    explicit String(uint64_t str_size);
 
     String(const char* str);
 
-    String(const char* str, unsigned long str_size);
+    String(const char* str, uint64_t str_size);
 
     String(const String& other);
 
@@ -46,7 +48,7 @@ public:
 
 private:
     char* _str;
-    unsigned long _size;
+    uint64_t _size;
 
 public:
     template<typename... Args>
@@ -57,7 +59,7 @@ public:
 };
 
 FORCE_INLINE
-String::String(const unsigned long str_size) :
+String::String(const uint64_t str_size) :
     _str(new char[str_size + 1]), _size(str_size) {
     _str[str_size] = '\0';
 }
@@ -66,7 +68,7 @@ FORCE_INLINE
 String::String(const char* const str) : String(str, strlen(str)) { }
 
 FORCE_INLINE
-String::String(const char* str, const unsigned long str_size) :
+String::String(const char* str, const uint64_t str_size) :
     String(str_size) {
     if (str != nullptr) memcpy(_str, str, str_size);
 }
@@ -139,7 +141,7 @@ String String::operator+(const char* const other) const {
     /* Nullptr check */
     if (other == nullptr) return String(_str, _size);
 
-    const unsigned long other_size = strlen(other);
+    const uint64_t other_size = strlen(other);
     String result(_size + other_size);
     memcpy(result._str, _str, _size);
     memcpy(result._str + _size, other, other_size);
@@ -207,7 +209,7 @@ T String::ToInt(const char* str) noexcept {
 template <typename... Args>
 FORCE_INLINE
 String String::Format(const char* const format, Args... args) {
-    String result((unsigned long)snprintf(nullptr, 0, format, args...));
+    String result((uint64_t)snprintf(nullptr, 0, format, args...));
     sprintf(result._str, format, args...);
     return result;
 }

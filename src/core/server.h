@@ -30,15 +30,15 @@ class Server final {
 public:
     PREVENT_INSTANTIATION(Server);
 
-    static void SavePeer(const unsigned char* public_key);
+    static void SavePeer(const uint8_t* public_key);
 
     static void Init();
 
     static void RunHandlePackagesLoop() noexcept;
 
     static void HandleTunPackage(TransferData& package,
-                                 int package_size,
-                                 unsigned int destination_netb) noexcept;
+                                 int32_t package_size,
+                                 uint32_t destination_netb) noexcept;
 
 private:
     struct Peers final {
@@ -50,8 +50,8 @@ private:
             uint64_t last_timestamp;
         } __attribute__((aligned(128)));
 
-        static inline unsigned int number = 0;
-        static inline LinkedList<const unsigned char*>*
+        static inline uint32_t number = 0;
+        static inline LinkedList<const uint8_t*>*
             public_keys = nullptr;
         static inline Dictionary<uint32_t, Details, uint32_t>*
             details = nullptr;
@@ -62,28 +62,28 @@ private:
 
     static void HandleHandshakeRequest(
         HandshakeRequest* package,
-        unsigned int package_size,
+        uint32_t package_size,
         sockaddr_in from
     );
 
     static void HandleTransferData(
         TransferData* package,
-        unsigned int package_size,
+        uint32_t package_size,
         sockaddr_in from
     ) noexcept;
 
     static void HandleGetPeerRequest(
         GetPeerRequest* package,
-        unsigned int package_size,
+        uint32_t package_size,
         sockaddr_in from
     ) noexcept;
 };
 
-FORCE_INLINE void Server::SavePeer(const unsigned char* const public_key) {
+FORCE_INLINE void Server::SavePeer(const uint8_t* const public_key) {
     /* If the peers list isn't defined yet */
     if (Peers::public_keys == nullptr) {
         /* Allocate the memory for the peers list */
-        Peers::public_keys = new LinkedList<const unsigned char*>();
+        Peers::public_keys = new LinkedList<const uint8_t*>();
 
         /* Set the program mode */
         mode = SERVER;
@@ -96,21 +96,21 @@ FORCE_INLINE void Server::SavePeer(const unsigned char* const public_key) {
 
 FORCE_INLINE void Server::Init() {
     /* Increase send and receive buffers */
-    const int rcvbuf = 32 * 1024 * 1024 * (int)Peers::number;
-    const int sndbuf = 32 * 1024 * 1024 * (int)Peers::number;
+    const int32_t rcvbuf = 32 * 1024 * 1024 * (int32_t)Peers::number;
+    const int32_t sndbuf = 32 * 1024 * 1024 * (int32_t)Peers::number;
     main_socket.SetOption(SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
     main_socket.SetOption(SO_SNDBUF, &sndbuf, sizeof(sndbuf));
 
     /* Allocate the memory for dictionaries */
-    Peers::details = new Dictionary<unsigned int,
+    Peers::details = new Dictionary<uint32_t,
                                     Peers::Details,
-                                    unsigned int>(Peers::number);
+                                    uint32_t>(Peers::number);
     Peers::timestamps = new Dictionary<KeyBuffer,
-                                       unsigned long,
-                                       unsigned int>(Peers::number);
+                                       uint64_t,
+                                       uint32_t>(Peers::number);
 
     /* Fill timestamps dictionary with zeros */
-    for (const unsigned char* public_key : *Peers::public_keys)
+    for (const uint8_t* public_key : *Peers::public_keys)
         Peers::timestamps->Put(public_key, 0UL);
 
     /* Add server to the peers list */
@@ -118,8 +118,8 @@ FORCE_INLINE void Server::Init() {
 }
 
 FORCE_INLINE void Server::HandleTunPackage(TransferData& package,
-                                           const int package_size,
-                                           const unsigned int destination_netb)
+                                           const int32_t package_size,
+                                           const uint32_t destination_netb)
 noexcept {
     /* Try to get the peers details */
     std::shared_lock details_lock(Peers::details_mutex);
@@ -132,11 +132,11 @@ noexcept {
     /* Encrypt the package */
     unsigned long long data_size;
     crypto_aead_chacha20poly1305_ietf_encrypt(
-        (unsigned char*)(void*)&package.data,
+        (uint8_t*)(void*)&package.data,
         &data_size,
-        (unsigned char*)(void*)&package.data,
-        (unsigned long long)package_size,
-        (unsigned char*)(void*)&package.header,
+        (uint8_t*)(void*)&package.data,
+        (uint64_t)package_size,
+        (uint8_t*)(void*)&package.header,
         sizeof(package.header),
         nullptr,
         package.header.nonce,
@@ -146,7 +146,7 @@ noexcept {
 
     /* Send the encrypted message */
     main_socket.Send((char*)(void*)&package,
-                     (long)(sizeof(package.header) + data_size),
+                     (int64_t)(sizeof(package.header) + data_size),
                      details->endpoint);
 }
 
@@ -158,13 +158,13 @@ FORCE_INLINE void Server::RunHandlePackagesLoop() noexcept {
     for (;;) {
         /* Recieve the request from a client */
         sockaddr_in from;
-        const int buffer_size = main_socket.Receive(buffer, &from);
+        const int32_t buffer_size = main_socket.Receive(buffer, &from);
 
         /* If there is an error */
         if (buffer_size == -1) continue;
 
         /* Get the type of the package */
-        const unsigned char raw_type = *(unsigned char*)buffer;
+        const uint8_t raw_type = *(uint8_t*)buffer;
         if (raw_type > TRANSFER_DATA) return;
         const PackageType type = (PackageType)raw_type;
 
@@ -172,7 +172,7 @@ FORCE_INLINE void Server::RunHandlePackagesLoop() noexcept {
 #define HANDLE_PACKAGE(T)                                                     \
         {                                                                     \
             T* const package = (T*)(void*)buffer;                             \
-            Handle##T(package, (unsigned int)buffer_size, from);              \
+            Handle##T(package, (uint32_t)buffer_size, from);              \
             continue;                                                         \
         }
 
@@ -189,7 +189,7 @@ FORCE_INLINE void Server::RunHandlePackagesLoop() noexcept {
 
 FORCE_INLINE void Server::HandleHandshakeRequest(
     HandshakeRequest* const package,
-    const unsigned int package_size,
+    const uint32_t package_size,
     const sockaddr_in from
 ) {
     INFO_LOG("Receive a handshake request from %s:%hu",
@@ -197,12 +197,12 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
              ntohs(from.sin_port));
 
     /* Buffer for the chained key */
-    unsigned char chain_key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
+    uint8_t chain_key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
 
     /* Decrypt the request data */
     {
         /* Compute the first shared secret */
-        unsigned char shared[crypto_scalarmult_BYTES];
+        uint8_t shared[crypto_scalarmult_BYTES];
         if (crypto_scalarmult(shared,
                               static_keys->Secret(),
                               package->header.ephemeral_public_key) == -1) {
@@ -217,12 +217,12 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
         /* Decrypt the message */
         unsigned long long dummy_len;
         if (crypto_aead_chacha20poly1305_ietf_decrypt(
-            (unsigned char*)(void*)&package->data,
+            (uint8_t*)(void*)&package->data,
             &dummy_len,
             nullptr,
-            (unsigned char*)(void*)&package->data,
+            (uint8_t*)(void*)&package->data,
             sizeof(package->data) + sizeof(package->poly1305_tag),
-            (unsigned char*)(void*)&package->header,
+            (uint8_t*)(void*)&package->header,
             sizeof(package->header),
             package->header.nonce,
             chain_key
@@ -236,7 +236,7 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     {
         /* Try to find such a static key in the allowed peers linked list */
         bool is_allowed = false;
-        for (const unsigned char* public_key : *Peers::public_keys)
+        for (const uint8_t* public_key : *Peers::public_keys)
             if (memcmp(package->data.static_public_key,
                        public_key,
                        crypto_scalarmult_BYTES) == 0)
@@ -250,11 +250,11 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     /* Check the timestamp */
     {
         /* Get the current time */
-        unsigned long current_time = (unsigned long)std::time(nullptr);
-        unsigned long client_timestamp = package->data.timestamp;
+        uint64_t current_time = (uint64_t)std::time(nullptr);
+        uint64_t client_timestamp = package->data.timestamp;
 
         /* Get the delta time */
-        unsigned long delta_time = current_time > client_timestamp
+        uint64_t delta_time = current_time > client_timestamp
                                  ? current_time - client_timestamp
                                  : client_timestamp - current_time;
 
@@ -262,7 +262,7 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
         if (delta_time > 120) return;
 
         /* Get the last timestamp for such a key */
-        unsigned long* const last_timestamp =
+        uint64_t* const last_timestamp =
             Peers::timestamps->Get(package->data.static_public_key);
 
         /* Compare current timestamp with the last one */
@@ -273,14 +273,14 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     }
 
     /* Variables for the response (default is data from the request) */
-    unsigned int response_ip = package->data.ip;
-    unsigned char response_netmask = package->data.netmask;
+    uint32_t response_ip = package->data.ip;
+    uint8_t response_netmask = package->data.netmask;
 
     /* Handle the local ip address and netmask */
     {
         /* Get the passed ip and the netmask */
-        const unsigned int client_ip = response_ip;
-        const unsigned char client_netmask = response_netmask;
+        const uint32_t client_ip = response_ip;
+        const uint8_t client_netmask = response_netmask;
 
         /* Try to delete the peer with such a static key (if exists) */
         std::unique_lock details_lock(Peers::details_mutex);
@@ -302,26 +302,26 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
             response_netmask = netmask;
 
             /* Try to get the random ip in the local network */
-            const unsigned int start = network_prefix.Hostb();
-            const unsigned int end = broadcast.Hostb();
-            const unsigned int random_ip =
-                (unsigned int)(start + (rand() % (end - start + 1)));
-            const unsigned int random_ip_netb = htonl(random_ip);
+            const uint32_t start = network_prefix.Hostb();
+            const uint32_t end = broadcast.Hostb();
+            const uint32_t random_ip =
+                (uint32_t)(start + (rand() % (end - start + 1)));
+            const uint32_t random_ip_netb = htonl(random_ip);
             if (!Peers::details->Has(random_ip_netb)) {
                 response_ip = random_ip_netb;
                 goto the_end;
             }
 
             /* Try to get the free ip */
-            for (unsigned int ip = random_ip; ip < end; ++ip) {
-                const unsigned int ip_netb = htonl(ip);
+            for (uint32_t ip = random_ip; ip < end; ++ip) {
+                const uint32_t ip_netb = htonl(ip);
                 if (!Peers::details->Has(ip_netb)) {
                     response_ip = ip_netb;
                     goto the_end;
                 }
             }
-            for (unsigned int ip = random_ip; ip > start; --ip) {
-                const unsigned int ip_netb = htonl(ip);
+            for (uint32_t ip = random_ip; ip > start; --ip) {
+                const uint32_t ip_netb = htonl(ip);
                 if (!Peers::details->Has(ip_netb)) {
                     response_ip = ip_netb;
                     goto the_end;
@@ -338,7 +338,7 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     Keys ephemeral_keys;
 
     /* Compute the second shared secret and update the chain keys */
-    unsigned char shared[crypto_scalarmult_BYTES];
+    uint8_t shared[crypto_scalarmult_BYTES];
     if (crypto_scalarmult(shared,
                           ephemeral_keys.Secret(),
                           package->header.ephemeral_public_key) == -1) {
@@ -384,11 +384,11 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     /* Encrypt the resposne */
     unsigned long long dummy_len;
     crypto_aead_chacha20poly1305_ietf_encrypt(
-        (unsigned char*)(void*)&response.data,
+        (uint8_t*)(void*)&response.data,
         &dummy_len,
-        (unsigned char*)(void*)&response.data,
+        (uint8_t*)(void*)&response.data,
         sizeof(response.data),
-        (unsigned char*)(void*)&response.header,
+        (uint8_t*)(void*)&response.header,
         sizeof(response.header),
         nullptr,
         response.header.nonce,
@@ -403,7 +403,7 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
 
 FORCE_INLINE void Server::HandleTransferData(
     TransferData* const package,
-    const unsigned int package_size,
+    const uint32_t package_size,
     const sockaddr_in from
 ) noexcept {
     TRACE_LOG("Receive a transfer data from the %s:%hu",
@@ -411,7 +411,7 @@ FORCE_INLINE void Server::HandleTransferData(
               ntohs(from.sin_port));
 
     /* Get the destination IP address */
-    unsigned int destination_netb = package->header.destination_ip;
+    uint32_t destination_netb = package->header.destination_ip;
 
     /* If we need to decrypt the package */
     if (destination_netb == local_ip.Netb()) {
@@ -424,12 +424,12 @@ FORCE_INLINE void Server::HandleTransferData(
         /* Decrypt the package */
         unsigned long long data_size;
         if (crypto_aead_chacha20poly1305_ietf_decrypt(
-            (unsigned char*)package->data,
+            (uint8_t*)package->data,
             &data_size,
             nullptr,
-            (unsigned char*)package->data,
+            (uint8_t*)package->data,
             package_size - sizeof(package->header),
-            (unsigned char*)(void*)&package->header,
+            (uint8_t*)(void*)&package->header,
             sizeof(package->header),
             package->header.nonce,
             peers_details->chain_key
@@ -458,7 +458,7 @@ FORCE_INLINE void Server::HandleTransferData(
         /* If we need to write the package to the TUN */
         if ((destination_netb & binmask.Netb()) != network_prefix.Netb() ||
             destination_netb == local_ip.Netb()) {
-            tun->Write(package->data, (unsigned int)data_size);
+            tun->Write(package->data, (uint32_t)data_size);
             return;
         }
 
@@ -479,11 +479,11 @@ FORCE_INLINE void Server::HandleTransferData(
 
         /* Encrypt the package */
         crypto_aead_chacha20poly1305_ietf_encrypt(
-            (unsigned char*)package->data,
+            (uint8_t*)package->data,
             &data_size,
-            (unsigned char*)package->data,
+            (uint8_t*)package->data,
             data_size,
-            (unsigned char*)(void*)&package->header,
+            (uint8_t*)(void*)&package->header,
             sizeof(package->header),
             nullptr,
             package->header.nonce,
@@ -515,7 +515,7 @@ FORCE_INLINE void Server::HandleTransferData(
 
 FORCE_INLINE void Server::HandleGetPeerRequest(
     GetPeerRequest* const package,
-    const unsigned int package_size,
+    const uint32_t package_size,
     const sockaddr_in from
 ) noexcept {
     TRACE_LOG("Receive a get peer package from the %s:%hu",
@@ -534,12 +534,12 @@ FORCE_INLINE void Server::HandleGetPeerRequest(
     /* Decrypt the package */
     unsigned long long data_size;
     if (crypto_aead_chacha20poly1305_ietf_decrypt(
-        (unsigned char*)(void*)&package->data,
+        (uint8_t*)(void*)&package->data,
         &data_size,
         nullptr,
-        (unsigned char*)(void*)&package->data,
+        (uint8_t*)(void*)&package->data,
         package_size - sizeof(package->header),
-        (unsigned char*)(void*)&package->header,
+        (uint8_t*)(void*)&package->header,
         sizeof(package->header),
         package->header.nonce,
         peers_details->chain_key

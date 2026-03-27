@@ -32,13 +32,13 @@ public:
 
     [[nodiscard]] bool IsUp() const noexcept;
 
-    int Read(char* buffer, unsigned int mtu) const noexcept;
+    int32_t Read(char* buffer, uint32_t mtu) const noexcept;
 
-    void Write(const char* buffer, unsigned int buffer_size) noexcept;
+    void Write(const char* buffer, uint32_t buffer_size) noexcept;
 
 private:
     const String _tun_name;
-    const int _tun_fd;
+    const int32_t _tun_fd;
 
     bool _is_up = false;
 };
@@ -95,22 +95,22 @@ FORCE_INLINE void TUN::Up() noexcept {
 
 FORCE_INLINE bool TUN::IsUp() const noexcept { return _is_up; }
 
-FORCE_INLINE int TUN::Read(char* const buffer, const unsigned int mtu)
+FORCE_INLINE int32_t TUN::Read(char* const buffer, const uint32_t mtu)
 const noexcept {
 #if LOG_LEVEL == 0
-    const int result = (int)read(_tun_fd, buffer, mtu);
+    const int32_t result = (int32_t)read(_tun_fd, buffer, mtu);
     if (result != -1)
         TRACE_LOG("Read %d bytes from the TUN", result);
     else
         WARN_LOG("Failed to read the data from the TUN");
     return result;
 #else
-    return (int)read(_tun_fd, buffer, mtu);
+    return (int32_t)read(_tun_fd, buffer, mtu);
 #endif
 }
 
 FORCE_INLINE void TUN::Write(const char* const buffer,
-                       const unsigned int buffer_size) noexcept {
+                       const uint32_t buffer_size) noexcept {
     TRACE_LOG("Writing %u bytes to the TUN", buffer_size);
     write(_tun_fd, buffer, buffer_size);
 }

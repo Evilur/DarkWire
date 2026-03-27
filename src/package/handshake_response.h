@@ -10,27 +10,27 @@
 struct HandshakeResponse final {
     struct {
         PackageType type;
-        unsigned char ephemeral_public_key[crypto_scalarmult_BYTES];
-        unsigned char nonce[crypto_aead_chacha20poly1305_ietf_NPUBBYTES];
+        uint8_t ephemeral_public_key[crypto_scalarmult_BYTES];
+        uint8_t nonce[crypto_aead_chacha20poly1305_ietf_NPUBBYTES];
     } __attribute__((packed)) header;
     struct {
-        unsigned int local_ip;
-        unsigned char netmask;
-        unsigned int server_local_ip;
+        uint32_t local_ip;
+        uint8_t netmask;
+        uint32_t server_local_ip;
     } __attribute__((packed)) data;
-    unsigned char poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
+    uint8_t poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
-    HandshakeResponse(const unsigned char* epk,
+    HandshakeResponse(const uint8_t* epk,
                       Nonce* nonce,
-                      unsigned int response_local_ip,
-                      unsigned char response_netmask) noexcept;
+                      uint32_t response_local_ip,
+                      uint8_t response_netmask) noexcept;
 } __attribute__((packed));
 
 FORCE_INLINE HandshakeResponse::HandshakeResponse(
-    const unsigned char* const epk,
+    const uint8_t* const epk,
     Nonce* const nonce,
-    const unsigned int response_local_ip,
-    const unsigned char response_netmask
+    const uint32_t response_local_ip,
+    const uint8_t response_netmask
 ) noexcept {
     /* Set the type */
     header.type = HANDSHAKE_RESPONSE;

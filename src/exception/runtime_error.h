@@ -3,6 +3,7 @@
 #include "util/class.h"
 #include "util/macro.h"
 
+#include <cstdint>
 #include <cstring>
 #include <exception>
 
@@ -24,7 +25,7 @@ private:
     char* _message = nullptr;
 };
 
-RuntimeError::~RuntimeError() noexcept { delete[] _message; }
+FORCE_INLINE RuntimeError::~RuntimeError() noexcept { delete[] _message; }
 
 FORCE_INLINE RuntimeError::RuntimeError(const char* const message) :
     _message(new char[strlen(message) + 1]) { strcpy(_message, message); }

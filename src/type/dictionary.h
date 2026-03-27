@@ -5,12 +5,14 @@
 #include "util/equal.h"
 #include "util/hash.h"
 
+#include <cstdint>
+
 template <typename T>
 using dictionary_optimal_param =
     std::conditional_t<std::is_fundamental_v<T>, T, const T&>;
 
 template <typename T>
-using dictionary_hash_func = unsigned long(*)(
+using dictionary_hash_func = uint64_t(*)(
     std::conditional_t<std::is_integral_v<T>, T, const T&>
 );
 
@@ -27,7 +29,7 @@ using dictionary_equal = bool(*)(const T&, const T&);
  * @tparam E Equal function
  */
 template <typename K, typename T,
-typename S = unsigned short,
+typename S = uint16_t,
 dictionary_hash_func<K> H = ::hash,
 dictionary_equal<K> E = ::equal>
 class Dictionary final {

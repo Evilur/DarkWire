@@ -9,36 +9,36 @@
 #include <sodium.h>
 #include <type_traits>
 
-static FORCE_INLINE unsigned long calculate(const unsigned char* element,
-                                      unsigned long size) noexcept;
+static FORCE_INLINE uint64_t calculate(const uint8_t* element,
+                                      uint64_t size) noexcept;
 
 template <std::integral T>
-FORCE_INLINE unsigned long hash(T element);
+FORCE_INLINE uint64_t hash(T element);
 
 template <typename T>
-FORCE_INLINE unsigned long hash(const T& element) noexcept;
+FORCE_INLINE uint64_t hash(const T& element) noexcept;
 
 template <>
-FORCE_INLINE unsigned long hash(const char* const& element) noexcept;
+FORCE_INLINE uint64_t hash(const char* const& element) noexcept;
 
 template <>
-FORCE_INLINE unsigned long hash(const sockaddr_in& element) noexcept;
+FORCE_INLINE uint64_t hash(const sockaddr_in& element) noexcept;
 
 template <>
-FORCE_INLINE unsigned long hash(const String& element) noexcept;
+FORCE_INLINE uint64_t hash(const String& element) noexcept;
 
 template <>
-FORCE_INLINE unsigned long hash(const KeyBuffer& element) noexcept;
+FORCE_INLINE uint64_t hash(const KeyBuffer& element) noexcept;
 
-static unsigned long calculate(const unsigned char* element,
-                                      const unsigned long size) noexcept {
+static uint64_t calculate(const uint8_t* element,
+                                      const uint64_t size) noexcept {
     /* The variable to store the hash (751 - random prime number) */
-    unsigned long hash = 751;
+    uint64_t hash = 751;
 
     /* Evaluate the hash */
-    const unsigned char* const element_end = element + size;
+    const uint8_t* const element_end = element + size;
     do {
-        const unsigned char byte = *element;
+        const uint8_t byte = *element;
         hash = (hash << 5) - hash + byte;
     } while (++element < element_end);
 
@@ -47,36 +47,36 @@ static unsigned long calculate(const unsigned char* element,
 }
 
 template <std::integral T>
-FORCE_INLINE unsigned long hash(const T element)
-{ return (unsigned long)element; }
+FORCE_INLINE uint64_t hash(const T element)
+{ return (uint64_t)element; }
 
 template <typename T>
-FORCE_INLINE unsigned long hash(const T& element) noexcept {
+FORCE_INLINE uint64_t hash(const T& element) noexcept {
     /* Get the byte array from the element and calc the hash */
     if constexpr (std::is_pointer_v<T>)
         return hash(*element);
     else if constexpr (!std::is_integral_v<T>)
-        return calculate((const unsigned char*)(void*)&element,
+        return calculate((const uint8_t*)(void*)&element,
                          sizeof(element));
-    else return (unsigned long)element;
+    else return (uint64_t)element;
 }
 
 template <>
-FORCE_INLINE unsigned long hash(const char* const& element) noexcept {
-    return calculate((const unsigned char*)element, strlen(element));
+FORCE_INLINE uint64_t hash(const char* const& element) noexcept {
+    return calculate((const uint8_t*)element, strlen(element));
 }
 
 template <>
-FORCE_INLINE unsigned long hash(const sockaddr_in& element) noexcept {
+FORCE_INLINE uint64_t hash(const sockaddr_in& element) noexcept {
     return element.sin_addr.s_addr + element.sin_port;
 }
 
 template <>
-FORCE_INLINE unsigned long hash(const String& element) noexcept {
+FORCE_INLINE uint64_t hash(const String& element) noexcept {
     return ::hash(element.CStr());
 }
 
 template <>
-FORCE_INLINE unsigned long hash(const KeyBuffer& element) noexcept {
+FORCE_INLINE uint64_t hash(const KeyBuffer& element) noexcept {
     return calculate(element.Get(), crypto_scalarmult_BYTES);
 }

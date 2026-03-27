@@ -21,7 +21,7 @@ struct TransferData final {
 
     TransferData() noexcept;
 
-    void UpdateHeader(Nonce* nonce, unsigned int destination_ip) noexcept;
+    void UpdateHeader(Nonce* nonce, uint32_t destination_ip) noexcept;
 } __attribute__((packed));
 
 FORCE_INLINE TransferData::TransferData() noexcept {
@@ -29,7 +29,7 @@ FORCE_INLINE TransferData::TransferData() noexcept {
 }
 
 FORCE_INLINE void TransferData::UpdateHeader(Nonce* const nonce,
-                                             const unsigned int destination_ip)
+                                             const uint32_t destination_ip)
 noexcept {
     /* Copy the nonce */
     nonce->Copy(header.nonce);

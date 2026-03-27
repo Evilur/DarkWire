@@ -18,7 +18,7 @@ inline NetAddr network_prefix;
 
 inline NetAddr broadcast;
 
-inline unsigned char netmask = 0;
+inline uint8_t netmask = 0;
 
 inline TUN* tun = nullptr;
 
@@ -28,16 +28,16 @@ inline const UDPSocket main_socket;
 
 static inline void on_terminate();
 
-[[nodiscard]] static int print_help();
+[[nodiscard]] static int32_t print_help();
 
-[[nodiscard]] static int genkey();
+[[nodiscard]] static int32_t genkey();
 
-[[nodiscard]] static int pubkey();
+[[nodiscard]] static int32_t pubkey();
 
-[[nodiscard]] static int handle_config(const char* name);
+[[nodiscard]] static int32_t handle_config(const char* name);
 
-[[nodiscard]] static int run_client();
+[[nodiscard]] static int32_t run_client();
 
-[[nodiscard]] static int run_server();
+[[nodiscard]] static int32_t run_server();
 
 void calc_net();

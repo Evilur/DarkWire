@@ -2,7 +2,9 @@
 
 #include "util/class.h"
 #include "util/macro.h"
+
 #include <algorithm>
+#include <cstdint>
 
 template <typename T>
 class LinkedList final {
@@ -30,15 +32,15 @@ public:
 
     bool Pop() noexcept;
 
-    unsigned int Pop(unsigned int number) noexcept;
+    uint32_t Pop(uint32_t number) noexcept;
 
     bool PopTail() noexcept;
 
-    unsigned int Remove(unsigned int index, unsigned int number = 1) noexcept;
+    uint32_t Remove(uint32_t index, uint32_t number = 1) noexcept;
 
-    T* Get(unsigned int index) noexcept;
+    T* Get(uint32_t index) noexcept;
 
-    const T* Get(unsigned int index) const noexcept;
+    const T* Get(uint32_t index) const noexcept;
 
     class Iterator {
     public:
@@ -149,8 +151,8 @@ bool LinkedList<T>::Pop() noexcept {
 
 template <typename T>
 FORCE_INLINE
-unsigned int LinkedList<T>::Pop(const unsigned int number) noexcept {
-    for (unsigned int i = 0; i < number; ++i) {
+uint32_t LinkedList<T>::Pop(const uint32_t number) noexcept {
+    for (uint32_t i = 0; i < number; ++i) {
         if (_head == nullptr) {
             _tail = nullptr;
             return i;
@@ -163,8 +165,8 @@ unsigned int LinkedList<T>::Pop(const unsigned int number) noexcept {
 
 template <typename T>
 FORCE_INLINE
-unsigned int LinkedList<T>::Remove(unsigned int index,
-                                   unsigned int number) noexcept {
+uint32_t LinkedList<T>::Remove(uint32_t index,
+                                   uint32_t number) noexcept {
     /* If we are deleting first elements */
     if (index == 0) return Pop(number);
 
@@ -176,7 +178,7 @@ unsigned int LinkedList<T>::Remove(unsigned int index,
     }
 
     /* A variable for store the result */
-    unsigned int result = 0;
+    uint32_t result = 0;
 
     /* Remove elements */
     while (number-- > 0) {
@@ -222,7 +224,7 @@ bool LinkedList<T>::PopTail() noexcept {
 
 template <typename T>
 FORCE_INLINE
-T* LinkedList<T>::Get(unsigned int index) noexcept {
+T* LinkedList<T>::Get(uint32_t index) noexcept {
     Node* node_ptr = _head;
     while (index-- > 0) {
         node_ptr = node_ptr->next;
@@ -233,7 +235,7 @@ T* LinkedList<T>::Get(unsigned int index) noexcept {
 
 template <typename T>
 FORCE_INLINE
-const T* LinkedList<T>::Get(unsigned int index) const noexcept {
+const T* LinkedList<T>::Get(uint32_t index) const noexcept {
     Node* node_ptr = _head;
     while (index-- > 0) {
         node_ptr = node_ptr->next;

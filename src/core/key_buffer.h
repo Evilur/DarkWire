@@ -14,7 +14,7 @@ class KeyBuffer final {
 public:
     ALLOW_COPY_ALLOW_MOVE(KeyBuffer);
 
-    KeyBuffer(const unsigned char *ptr) noexcept;
+    KeyBuffer(const uint8_t *ptr) noexcept;
 
     ~KeyBuffer() = default;
 
@@ -22,13 +22,13 @@ public:
 
     bool operator!=(const KeyBuffer& other) const noexcept;
 
-    [[nodiscard]] const unsigned char* Get() const noexcept;
+    [[nodiscard]] const uint8_t* Get() const noexcept;
 
 private:
-    const unsigned char* _ptr = nullptr;
+    const uint8_t* _ptr = nullptr;
 };
 
-FORCE_INLINE KeyBuffer::KeyBuffer(const unsigned char* const ptr)
+FORCE_INLINE KeyBuffer::KeyBuffer(const uint8_t* const ptr)
 noexcept : _ptr(ptr) { }
 
 FORCE_INLINE bool KeyBuffer::operator==(const KeyBuffer& other)
@@ -41,5 +41,5 @@ const noexcept {
     return memcmp(_ptr, other._ptr, crypto_scalarmult_BYTES) != 0;
 }
 
-FORCE_INLINE const unsigned char* KeyBuffer::Get()
+FORCE_INLINE const uint8_t* KeyBuffer::Get()
 const noexcept { return _ptr; }

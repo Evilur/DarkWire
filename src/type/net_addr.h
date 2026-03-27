@@ -17,29 +17,29 @@ public:
 
     ~NetAddr() noexcept = default;
 
-    void SetHostb(unsigned int address) noexcept;
+    void SetHostb(uint32_t address) noexcept;
 
-    void SetNetb(unsigned int address) noexcept;
+    void SetNetb(uint32_t address) noexcept;
 
-    [[nodiscard]] unsigned int Hostb() const noexcept;
+    [[nodiscard]] uint32_t Hostb() const noexcept;
 
-    [[nodiscard]] unsigned int Netb() const noexcept;
+    [[nodiscard]] uint32_t Netb() const noexcept;
 
 private:
-    unsigned int _hostb = INADDR_ANY;
-    unsigned int _netb = INADDR_ANY;
+    uint32_t _hostb = INADDR_ANY;
+    uint32_t _netb = INADDR_ANY;
 };
 
-FORCE_INLINE void NetAddr::SetHostb(const unsigned int address) noexcept {
+FORCE_INLINE void NetAddr::SetHostb(const uint32_t address) noexcept {
     _hostb = address;
     _netb = htonl(address);
 }
 
-FORCE_INLINE void NetAddr::SetNetb(const unsigned int address) noexcept {
+FORCE_INLINE void NetAddr::SetNetb(const uint32_t address) noexcept {
     _hostb = ntohl(address);
     _netb = address;
 }
 
-FORCE_INLINE unsigned int NetAddr::Hostb() const noexcept { return _hostb; }
+FORCE_INLINE uint32_t NetAddr::Hostb() const noexcept { return _hostb; }
 
-FORCE_INLINE unsigned int NetAddr::Netb() const noexcept { return _netb; }
+FORCE_INLINE uint32_t NetAddr::Netb() const noexcept { return _netb; }

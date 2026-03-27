@@ -1,6 +1,8 @@
 #pragma once
 
-enum PackageType : unsigned char {
+#include <cstdint>
+
+enum PackageType : uint8_t {
     HANDSHAKE_REQUEST = 1,
     HANDSHAKE_RESPONSE = 2,
     GET_PEER_REQUEST = 3,

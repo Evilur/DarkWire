@@ -2,6 +2,7 @@
 
 #include "util/macro.h"
 
+#include <cstdint>
 #include <cstdio>
 #include <ctime>
 
@@ -72,7 +73,7 @@ void Logger::Log(FILE* const stream,
                  const char* const format,
                  Args... args) {
     /* Get current time */
-    constexpr int time_buffer_size = 20;
+    constexpr int32_t time_buffer_size = 20;
     char time_buffer[time_buffer_size];
     const time_t current_time = time(nullptr);
     const tm* const time_info = localtime(&current_time);

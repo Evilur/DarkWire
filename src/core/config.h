@@ -18,8 +18,8 @@ public:
         static inline LinkedList<String> post_up;
         static inline LinkedList<String> pre_down;
         static inline LinkedList<String> post_down;
-        static inline short listen = 0;
-        static inline int mtu = 1420;
+        static inline int16_t listen = 0;
+        static inline int32_t mtu = 1420;
     };
 
     struct Server final {
