@@ -5,15 +5,17 @@
 #include "socket/udp_socket.h"
 #include "util/macro.h"
 #include "util/nonce.h"
+#include "util/time.h"
 
 #include <sodium.h>
 
 struct TransferData final {
     struct {
         PackageType type;
-        unsigned char nonce[crypto_aead_chacha20poly1305_ietf_NPUBBYTES];
-        unsigned int source_ip;
-        unsigned int destination_ip;
+        uint8_t nonce[crypto_aead_chacha20poly1305_ietf_NPUBBYTES];
+        uint32_t source_ip;
+        uint32_t destination_ip;
+        uint64_t timestamp;
     } __attribute__((packed)) header;
     char data[UDPSocket::MTU - sizeof(header)];
 
@@ -37,4 +39,7 @@ noexcept {
 
     /* Set the destination ip */
     header.destination_ip = destination_ip;
+
+    /* Set the timestamp */
+    header.timestamp = Time::Nanoseconds();
 }

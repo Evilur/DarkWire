@@ -4,6 +4,7 @@
 #include "core/config.h"
 #include "core/keys.h"
 #include "core/tun.h"
+#include "package/get_peer_request.h"
 #include "package/handshake_request.h"
 #include "package/handshake_response.h"
 #include "package/keep_alive.h"
@@ -22,6 +23,7 @@
 #include <netinet/in.h>
 #include <shared_mutex>
 #include <sodium.h>
+#include <thread>
 #include <unistd.h>
 
 /**
@@ -65,8 +67,12 @@ private:
 
         static inline Dictionary<unsigned int,
                                  Details,
-                                 unsigned int>* details = nullptr;
+                                 unsigned char>* details = nullptr;
         static inline std::shared_mutex details_mutex;
+        static inline Dictionary<unsigned int,
+                                 signed char,
+                                 unsigned char>* hole_punching = nullptr;
+        static inline std::mutex hole_punching_mutex;
     };
 
     static inline unsigned long _next_handshake_timestamp =
@@ -83,6 +89,8 @@ private:
         unsigned int package_size,
         sockaddr_in from
     ) noexcept;
+
+    static void GetPeerFromServer(unsigned int ip_netb) noexcept;
 };
 
 FORCE_INLINE void Client::Init() {
@@ -111,7 +119,10 @@ FORCE_INLINE void Client::Init() {
     /* Allocate memory for peers */
     Peers::details = new Dictionary<unsigned int,
                                     Peers::Details,
-                                    unsigned int>(16);
+                                    unsigned char>(16);
+    Peers::hole_punching = new Dictionary<unsigned int,
+                                          signed char,
+                                          unsigned char>(16);
 }
 
 FORCE_INLINE void Client::RunHandshakeLoop() {
@@ -191,7 +202,7 @@ FORCE_INLINE void Client::RunHandlePackagesLoop() noexcept {
         if (buffer_size == -1) continue;
 
         /* Get the type of the package */
-        const unsigned char raw_type = *(const unsigned char*)buffer;
+        const unsigned char raw_type = *(unsigned char*)buffer;
         if (raw_type > TRANSFER_DATA) return;
         const PackageType type = (PackageType)raw_type;
 
@@ -247,9 +258,17 @@ noexcept {
             nonce = details->nonce;
             /* If there is no such an ip in the dictionary */
         } else {
-            /* Try to get the peer from the server */
-            if ((destination_netb & binmask.Netb()) == network_prefix.Netb())
-                DEBUG_LOG("OK");
+            /* Try to get the peer from the server
+             * (If we didn't do that yet) */
+            {
+                std::lock_guard hole_punching_lock(Peers::hole_punching_mutex);
+                if ((destination_netb & binmask.Netb()) ==
+                    network_prefix.Netb() &&
+                    !Peers::hole_punching->Has(destination_netb)) {
+                    Peers::hole_punching->Put(destination_netb, -1);
+                    std::thread(GetPeerFromServer, destination_netb).detach();
+                }
+            }
 
             endpoint = Server::endpoint;
             key = Server::chain_key;
@@ -416,4 +435,42 @@ FORCE_INLINE void Client::HandleTransferData(
 
     /* Write the package to the tun */
     tun->Write(package->data, (unsigned int)data_size);
+}
+
+FORCE_INLINE void Client::GetPeerFromServer(const unsigned int ip_netb)
+noexcept {
+    std::unique_lock hole_punching_lock(Peers::hole_punching_mutex);
+    do {
+        /* Assemble the package */
+        hole_punching_lock.unlock();
+        std::unique_lock server_lock(Server::mutex);
+        GetPeerRequest package(ip_netb, Server::nonce);
+
+        /* Encrypt the package */
+        unsigned long long data_size;
+        if (crypto_aead_chacha20poly1305_ietf_decrypt(
+            (unsigned char*)(void*)&package.data,
+            &data_size,
+            nullptr,
+            (unsigned char*)(void*)&package.data,
+            sizeof(ip_netb),
+            (unsigned char*)(void*)&package.header,
+            sizeof(package.header),
+            package.header.nonce,
+            Server::chain_key
+        ) != 0) {
+            WARN_LOG("Forged message found");
+            return;
+        }
+        server_lock.unlock();
+
+        /* Send the encrypted message */
+        main_socket.Send((char*)(void*)&package,
+                         (long)(data_size + sizeof(package.header)),
+                         Server::endpoint);
+
+        /* Wait for 6 seconds and retry */
+        usleep(6 * 1000 * 1000);
+        hole_punching_lock.lock();
+    } while (*Peers::hole_punching->Get(ip_netb) == -1);
 }

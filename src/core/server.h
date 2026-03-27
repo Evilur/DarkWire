@@ -3,6 +3,7 @@
 #include "main.h"
 #include "core/keys.h"
 #include "core/tun.h"
+#include "package/get_peer_request.h"
 #include "package/handshake_request.h"
 #include "package/handshake_response.h"
 #include "package/package_type.h"
@@ -44,19 +45,19 @@ private:
         struct Details final {
             UniqPtr<Nonce> nonce;
             sockaddr_in endpoint;
-            unsigned char static_public_key[crypto_scalarmult_BYTES];
-            unsigned char chain_key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
+            uint8_t static_public_key[crypto_scalarmult_BYTES];
+            uint8_t chain_key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
+            uint64_t last_timestamp;
         } __attribute__((aligned(128)));
 
         static inline unsigned int number = 0;
-        static inline LinkedList<const unsigned char*>* public_keys = nullptr;
-        static inline Dictionary<unsigned int,
-                                 Details,
-                                 unsigned int>* details = nullptr;
+        static inline LinkedList<const unsigned char*>*
+            public_keys = nullptr;
+        static inline Dictionary<uint32_t, Details, uint32_t>*
+            details = nullptr;
         static inline std::shared_mutex details_mutex;
-        static inline Dictionary<KeyBuffer,
-                                 unsigned long,
-                                 unsigned int>* timestamps = nullptr;
+        static inline Dictionary<KeyBuffer, uint64_t, uint32_t>*
+            timestamps = nullptr;
     };
 
     static void HandleHandshakeRequest(
@@ -67,6 +68,12 @@ private:
 
     static void HandleTransferData(
         TransferData* package,
+        unsigned int package_size,
+        sockaddr_in from
+    ) noexcept;
+
+    static void HandleGetPeerRequest(
+        GetPeerRequest* package,
         unsigned int package_size,
         sockaddr_in from
     ) noexcept;
@@ -174,7 +181,9 @@ FORCE_INLINE void Server::RunHandlePackagesLoop() noexcept {
             if (buffer_size == sizeof(HandshakeRequest))
                 HANDLE_PACKAGE(HandshakeRequest);
         if (type == TRANSFER_DATA)
-                HANDLE_PACKAGE(TransferData);
+            HANDLE_PACKAGE(TransferData);
+        if (type == GET_PEER_REQUEST)
+            HANDLE_PACKAGE(GetPeerRequest);
     }
 }
 
@@ -353,7 +362,8 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     {
         Peers::Details details {
             .nonce = nonce,
-            .endpoint = from
+            .endpoint = from,
+            .last_timestamp = Time::Nanoseconds()
         };
         std::unique_lock details_lock(Peers::details_mutex);
         memcpy(details.static_public_key,
@@ -407,17 +417,17 @@ FORCE_INLINE void Server::HandleTransferData(
     if (destination_netb == local_ip.Netb()) {
         /* Try to get the key to decrypt the package */
         std::shared_lock details_lock(Peers::details_mutex);
-        const Peers::Details* const peers_details =
+        Peers::Details* const peers_details =
             Peers::details->Get(package->header.source_ip);
         if (peers_details == nullptr) { return; }
 
         /* Decrypt the package */
         unsigned long long data_size;
         if (crypto_aead_chacha20poly1305_ietf_decrypt(
-            (unsigned char*)(void*)&package->data,
+            (unsigned char*)package->data,
             &data_size,
             nullptr,
-            (unsigned char*)(void*)&package->data,
+            (unsigned char*)package->data,
             package_size - sizeof(package->header),
             (unsigned char*)(void*)&package->header,
             sizeof(package->header),
@@ -428,8 +438,22 @@ FORCE_INLINE void Server::HandleTransferData(
             return;
         }
 
+        uint64_t package_timestamp = package->header.timestamp;
+
+        /* Check the endpoint */
+        if (!equal(peers_details->endpoint, from)) {
+            /* Package timestamp cannot be less or equal last timestamp */
+            if (peers_details->last_timestamp >= package_timestamp) return;
+
+            /* Update the endpoint */
+            peers_details->endpoint = from;
+        }
+
+        /* Update the last timestamp */
+        peers_details->last_timestamp = package->header.timestamp;
+
         /* Get the real destination address */
-        destination_netb = ((iphdr*)(void*)&package->data)->daddr;
+        destination_netb = ((iphdr*)(void*)package->data)->daddr;
 
         /* If we need to write the package to the TUN */
         if ((destination_netb & binmask.Netb()) != network_prefix.Netb() ||
@@ -455,9 +479,9 @@ FORCE_INLINE void Server::HandleTransferData(
 
         /* Encrypt the package */
         crypto_aead_chacha20poly1305_ietf_encrypt(
-            (unsigned char*)(void*)&package->data,
+            (unsigned char*)package->data,
             &data_size,
-            (unsigned char*)(void*)&package->data,
+            (unsigned char*)package->data,
             data_size,
             (unsigned char*)(void*)&package->header,
             sizeof(package->header),
@@ -487,4 +511,46 @@ FORCE_INLINE void Server::HandleTransferData(
                          package_size,
                          peer_details->endpoint);
     }
+}
+
+FORCE_INLINE void Server::HandleGetPeerRequest(
+    GetPeerRequest* const package,
+    const unsigned int package_size,
+    const sockaddr_in from
+) noexcept {
+    TRACE_LOG("Receive a get peer package from the %s:%hu",
+              inet_ntoa(from.sin_addr),
+              ntohs(from.sin_port));
+
+    /* Try to get the key to decrypt the package */
+    std::shared_lock details_lock(Peers::details_mutex);
+    const Peers::Details* const peers_details =
+        Peers::details->Get(package->header.source_ip);
+    if (peers_details == nullptr) { return; }
+
+    /* Check the endpoint */
+    if (!equal(peers_details->endpoint, from)) return;
+
+    /* Decrypt the package */
+    unsigned long long data_size;
+    if (crypto_aead_chacha20poly1305_ietf_decrypt(
+        (unsigned char*)(void*)&package->data,
+        &data_size,
+        nullptr,
+        (unsigned char*)(void*)&package->data,
+        package_size - sizeof(package->header),
+        (unsigned char*)(void*)&package->header,
+        sizeof(package->header),
+        package->header.nonce,
+        peers_details->chain_key
+    ) != 0) {
+        WARN_LOG("Forged message found");
+        return;
+    }
+    details_lock.unlock();
+
+    /* Get the address */
+
+    /* Assemble the response package */
+
 }
