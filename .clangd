@@ -41,7 +41,6 @@ Diagnostics:
       - '*'
     Remove:
       - altera-unroll-loops
-      - google-objc-function-naming
       - bugprone-casting-through-void
       - bugprone-easily-swappable-parameters
       - cppcoreguidelines-avoid-c-arrays
@@ -50,9 +49,9 @@ Diagnostics:
       - cppcoreguidelines-avoid-goto
       - cppcoreguidelines-avoid-magic-numbers
       - cppcoreguidelines-non-private-member-variables-in-classes
-      - readability-avoid-nested-conditional-operator
       - cppcoreguidelines-owning-memory
       - cppcoreguidelines-pro-bounds-array-to-pointer-decay
+      - cppcoreguidelines-pro-bounds-constant-array-index
       - cppcoreguidelines-pro-bounds-pointer-arithmetic
       - cppcoreguidelines-pro-type-cstyle-cast
       - cppcoreguidelines-pro-type-vararg
@@ -60,9 +59,9 @@ Diagnostics:
       - fuchsia-default-arguments-declarations
       - fuchsia-overloaded-operator
       - fuchsia-statically-constructed-objects
+      - google-objc-function-naming
       - google-readability-braces-around-statements
       - google-readability-casting
-      - google-runtime-int
       - hicpp-avoid-c-arrays
       - hicpp-avoid-goto
       - hicpp-braces-around-statements
@@ -79,9 +78,9 @@ Diagnostics:
       - modernize-avoid-c-arrays
       - modernize-use-auto
       - modernize-use-trailing-return-type
+      - readability-avoid-nested-conditional-operator
       - readability-braces-around-statements
       - readability-identifier-length
-      - cppcoreguidelines-pro-bounds-constant-array-index
       - readability-magic-numbers
     MissingIncludes: Strict
 Completion:
