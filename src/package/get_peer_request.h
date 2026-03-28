@@ -4,6 +4,7 @@
 #include "package/package_type.h"
 #include "util/macro.h"
 #include "util/nonce.h"
+#include "util/time.h"
 
 #include <sodium.h>
 
@@ -12,6 +13,7 @@ struct GetPeerRequest final {
         PackageType type;
         uint8_t nonce[crypto_aead_chacha20poly1305_ietf_NPUBBYTES];
         uint32_t source_ip;
+        uint64_t timestamp;
     } __attribute__((packed)) header;
     struct {
         uint32_t destination_ip;
@@ -31,6 +33,9 @@ FORCE_INLINE GetPeerRequest::GetPeerRequest(Nonce* const nonce,
 
     /* Set the source ip */
     header.source_ip = local_ip.Netb();
+
+    /* Set the timestamp */
+    header.timestamp = Time::Nanoseconds();
 
     /* Set the peer's ip */
     data.destination_ip = peer_ip;

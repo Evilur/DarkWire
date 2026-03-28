@@ -3,7 +3,6 @@
 #include "main.h"
 #include "core/keys.h"
 #include "core/tun.h"
-#include "package/changed_ip.h"
 #include "package/get_peer_request.h"
 #include "package/handshake_request.h"
 #include "package/handshake_response.h"
@@ -85,9 +84,6 @@ private:
         uint32_t package_size,
         const sockaddr_in& from
     ) noexcept;
-
-    static void SendChangedIPPackage(uint32_t ip,
-                                     Peers::Details* peer_details) noexcept;
 };
 
 FORCE_INLINE void Server::SavePeer(const uint8_t* const public_key) {
@@ -433,9 +429,13 @@ FORCE_INLINE void Server::HandleTransferData(
             Peers::details->Get(package->header.source_ip);
         if (peers_details == nullptr) { return; }
 
+        /* Get the package timestamp */
+        uint64_t package_timestamp = package->header.timestamp;
+
         /* Decrypt the package */
         unsigned long long data_size;
-        if (crypto_aead_chacha20poly1305_ietf_decrypt(
+        if (package_timestamp <= peers_details->last_timestamp ||
+            crypto_aead_chacha20poly1305_ietf_decrypt(
             (uint8_t*)package->data,
             &data_size,
             nullptr,
@@ -450,20 +450,9 @@ FORCE_INLINE void Server::HandleTransferData(
             return;
         }
 
-        /* Get the package timestamp */
-        uint64_t package_timestamp = package->header.timestamp;
-
-        /* Check the endpoint */
-        if (!equal(peers_details->endpoint, from)) {
-            /* Package timestamp cannot be less or equal last timestamp */
-            if (peers_details->last_timestamp >= package_timestamp) return;
-
-            /* Update the endpoint */
+        /* Update the endpoint */
+        if (!equal(peers_details->endpoint, from))
             peers_details->endpoint = from;
-
-            /* Send the changed ip package to the source */
-            SendChangedIPPackage(package->header.source_ip, peers_details);
-        }
 
         /* Update the last timestamp */
         peers_details->last_timestamp = package_timestamp;
@@ -543,13 +532,17 @@ FORCE_INLINE void Server::HandleKeepAlive(
         Peers::details->Get(package->header.source_ip);
     if (peers_details == nullptr) { return; }
 
+    /* Get the package timestamp */
+    const uint64_t package_timestamp = package->header.timestamp;
+
     /* Decrypt the package */
     unsigned long long data_size;
-    if (crypto_aead_chacha20poly1305_ietf_decrypt(
-        (uint8_t*)(void*)&package->data,
+    if (package_timestamp <= peers_details->last_timestamp ||
+        crypto_aead_chacha20poly1305_ietf_decrypt(
+        (uint8_t*)package->data,
         &data_size,
         nullptr,
-        (uint8_t*)(void*)&package->data,
+        (uint8_t*)package->data,
         sizeof(package->data) + sizeof(package->poly1305_tag),
         (uint8_t*)(void*)&package->header,
         sizeof(package->header),
@@ -561,23 +554,11 @@ FORCE_INLINE void Server::HandleKeepAlive(
     }
     details_lock.unlock();
 
-    /* Get the package timestamp */
-    const uint64_t timestamp = package->data.timestamp;
-
-    /* Check the endpoint */
-    if (!equal(peers_details->endpoint, from)) {
-        /* Package timestamp cannot be less or equal last timestamp */
-        if (peers_details->last_timestamp >= timestamp) return;
-
-        /* Update the endpoint */
-        peers_details->endpoint = from;
-
-        /* Send the changed ip package to the source */
-        SendChangedIPPackage(package->header.source_ip, peers_details);
-    }
+    /* Update the endpoint */
+    if (!equal(peers_details->endpoint, from)) peers_details->endpoint = from;
 
     /* Update the last timestamp */
-    peers_details->last_timestamp = timestamp;
+    peers_details->last_timestamp = package_timestamp;
 }
 
 FORCE_INLINE void Server::HandleGetPeerRequest(
@@ -600,7 +581,8 @@ FORCE_INLINE void Server::HandleGetPeerRequest(
 
     /* Decrypt the package */
     unsigned long long data_size;
-    if (crypto_aead_chacha20poly1305_ietf_decrypt(
+    if (package->header.timestamp <= peers_details->last_timestamp ||
+        crypto_aead_chacha20poly1305_ietf_decrypt(
         (uint8_t*)(void*)&package->data,
         &data_size,
         nullptr,
@@ -620,34 +602,4 @@ FORCE_INLINE void Server::HandleGetPeerRequest(
 
     /* Assemble the response package */
 
-}
-
-FORCE_INLINE
-void Server::SendChangedIPPackage(const uint32_t ip,
-                                  Peers::Details* const peer_details)
-noexcept {
-    /* Assemble the package */
-    ChangedIP package(peer_details->nonce, ip);
-
-    /* Encrypt the package */
-    unsigned long long data_size;
-    if (crypto_aead_chacha20poly1305_ietf_encrypt(
-        (uint8_t*)(void*)&package.data,
-        &data_size,
-        (uint8_t*)(void*)&package.data,
-        sizeof(package.data),
-        (uint8_t*)(void*)&package.header,
-        sizeof(package.header),
-        nullptr,
-        package.header.nonce,
-        peer_details->chain_key
-    ) != 0) {
-        WARN_LOG("Forged message found");
-        return;
-    }
-
-    /* Send the package */
-    main_socket.Send((char*)(void*)&package,
-                     sizeof(package),
-                     peer_details->endpoint);
 }

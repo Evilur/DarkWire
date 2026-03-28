@@ -242,9 +242,9 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
                 KeepAlive keep_alive(Server::nonce, timestamp);
                 unsigned long long data_size;
                 crypto_aead_chacha20poly1305_ietf_encrypt(
-                    (uint8_t*)(void*)&keep_alive.data,
+                    (uint8_t*)keep_alive.data,
                     &data_size,
-                    (uint8_t*)(void*)&keep_alive.data,
+                    (uint8_t*)keep_alive.data,
                     sizeof(keep_alive.data),
                     (uint8_t*)(void*)&keep_alive.header,
                     sizeof(keep_alive.header),
@@ -276,9 +276,9 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
             KeepAlive keep_alive(peer_details.nonce, timestamp);
             unsigned long long data_size;
             crypto_aead_chacha20poly1305_ietf_encrypt(
-                (uint8_t*)(void*)&keep_alive.data,
+                (uint8_t*)keep_alive.data,
                 &data_size,
-                (uint8_t*)(void*)&keep_alive.data,
+                (uint8_t*)keep_alive.data,
                 sizeof(keep_alive.data),
                 (uint8_t*)(void*)&keep_alive.header,
                 sizeof(keep_alive.header),
