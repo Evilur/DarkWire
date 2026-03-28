@@ -26,7 +26,7 @@
     #define FILENO fileno
 #endif
 
-int main(const int argc, const char* const* const argv) {
+int32_t main(const int32_t argc, const char* const* const argv) {
     /* Bind the 'on_terminate' handler */
     std::set_terminate(on_terminate);
 
@@ -41,7 +41,7 @@ int main(const int argc, const char* const* const argv) {
 
     /* Add some entrophy for the rand() */
     {
-        unsigned int random_buf;
+        uint32_t random_buf;
         randombytes_buf(&random_buf, sizeof(random_buf));
         std::srand(random_buf);
     }
@@ -83,7 +83,7 @@ static void on_terminate() {
     } catch (...) { FATAL_LOG("Unhandled unknown exception"); }
 }
 
-static int print_help() {
+static int32_t print_help() {
     constexpr const char* const help_message =
         "NAME:\n"
         "\tdw - DarkWire\n\n"
@@ -105,12 +105,12 @@ static int print_help() {
     return 0;
 }
 
-static int genkey() {
+static int32_t genkey() {
     /* Create the keys pair */
     const Keys keys;
 
     /* Create a buffer for the base64 key representations */
-    const unsigned long base64_size = sodium_base64_encoded_len(
+    const uint64_t base64_size = sodium_base64_encoded_len(
         crypto_scalarmult_BYTES,
         sodium_base64_VARIANT_ORIGINAL
     );
@@ -137,9 +137,9 @@ static int genkey() {
     return 0;
 }
 
-static int pubkey() {
+static int32_t pubkey() {
     /* Create a buffer for the base64 key representations */
-    const unsigned long base64_size = sodium_base64_encoded_len(
+    const uint64_t base64_size = sodium_base64_encoded_len(
         crypto_scalarmult_BYTES,
         sodium_base64_VARIANT_ORIGINAL
     );
@@ -148,7 +148,7 @@ static int pubkey() {
 
     /* Read the STDIN */
     if (ISATTY(FILENO(stdin))) printf("Enter the secret key: ");
-    if (fgets(base64_buffer, (int)base64_size, stdin) == nullptr) {
+    if (fgets(base64_buffer, (int32_t)base64_size, stdin) == nullptr) {
         FATAL_LOG("Failed to read the STDIN");
         return -1;
     }
@@ -168,7 +168,7 @@ static int pubkey() {
     return 0;
 }
 
-static int handle_config(const char* const name) {
+static int32_t handle_config(const char* const name) {
     /* Set the suffix */
     constexpr const char suffix[] = ".conf";
 
@@ -200,7 +200,7 @@ static int handle_config(const char* const name) {
     }
 
     /* Read the config file line by line */
-    constexpr int BUFFER_SIZE = 1024 * 8;
+    constexpr int32_t BUFFER_SIZE = 1024 * 8;
     char line_buffer[BUFFER_SIZE];
     char current_section[16] = "\0";;
     while (config.getline(line_buffer, BUFFER_SIZE)) {
@@ -237,8 +237,8 @@ static int handle_config(const char* const name) {
         /* If there is a 'Peers' section */
         if (strcmp(current_section, "Peers") == 0) {
             /* Decode and save the base64 */
-            unsigned char* public_key =
-                new unsigned char[crypto_scalarmult_BYTES];
+            uint8_t* public_key =
+                new uint8_t[crypto_scalarmult_BYTES];
             sodium_base642bin(public_key, crypto_scalarmult_BYTES,
                               line_ptr, strlen(line_ptr),
                               nullptr, nullptr, nullptr,
@@ -279,9 +279,10 @@ static int handle_config(const char* const name) {
                 Config::Interface::post_down.Push(parameter_value);
             else if (strcmp(parameter_key, "Listen") == 0)
                 Config::Interface::listen =
-                    String::ToInt<short>(parameter_value);
+                    String::ToInt<uint16_t>(parameter_value);
             else if (strcmp(parameter_key, "MTU") == 0)
-                Config::Interface::mtu = String::ToInt<int>(parameter_value);
+                Config::Interface::mtu =
+                    String::ToInt<uint32_t>(parameter_value);
         } else if (strcmp(current_section, "Server") == 0) {
             if (strcmp(parameter_key, "PublicKey") == 0)
                 Config::Server::public_key = parameter_value;
@@ -297,7 +298,7 @@ static int handle_config(const char* const name) {
     }
 
     /* Check the MTU */
-    constexpr int INNER_MTU = sizeof(TransferData::data) -
+    constexpr int32_t INNER_MTU = sizeof(TransferData::data) -
                               crypto_aead_chacha20poly1305_ietf_ABYTES;
     if (Config::Interface::mtu > INNER_MTU) {
         FATAL_LOG("MTU can not be more than %d", INNER_MTU);
@@ -310,7 +311,7 @@ static int handle_config(const char* const name) {
     /* Init the main socket for all future connections */
     main_socket.Bind({
         .sin_family = AF_INET,
-        .sin_port = htons((unsigned short)Config::Interface::listen),
+        .sin_port = htons((uint16_t)Config::Interface::listen),
         .sin_addr = INADDR_ANY
     });
 
@@ -323,7 +324,7 @@ static int handle_config(const char* const name) {
 
         /* Set the ip address and the netmask */
         local_ip.SetNetb(inet_addr(address_buffer));
-        netmask = (unsigned char)atoi(address_buffer_sep + 1);
+        netmask = (uint8_t)atoi(address_buffer_sep + 1);
 
         if (netmask > 30) {
             FATAL_LOG("Netmask can't be more than 30");
@@ -339,7 +340,7 @@ static int handle_config(const char* const name) {
     return 0;
 }
 
-static int run_client() {
+static int32_t run_client() {
     /* Init the client */
     Client::Init();
 
@@ -354,11 +355,11 @@ static int run_client() {
     std::thread(Client::RunHandlePackagesLoop).detach();
 
     /* Handle incoming packages from the TUN */
-    const unsigned int MTU = (unsigned int)Config::Interface::mtu;
+    const uint32_t MTU = Config::Interface::mtu;
     TransferData package;
     for (;;) {
         /* Read the package to the buffer from the TUN */
-        const int package_size = tun->Read(package.data, MTU);
+        const int32_t package_size = tun->Read(package.data, MTU);
 
         /* Cast the buffer to the ip header struct */
         const iphdr* const ip_header = (iphdr*)(void*)package.data;
@@ -381,7 +382,7 @@ static int run_client() {
     return -1;
 }
 
-static int run_server() {
+static int32_t run_server() {
     /* Up the interface */
     tun->Up();
 
@@ -392,11 +393,11 @@ static int run_server() {
     std::thread(Server::RunHandlePackagesLoop).detach();
 
     /* Handle incoming packages from the TUN */
-    const unsigned int MTU = (unsigned int)Config::Interface::mtu;
+    const uint32_t MTU = Config::Interface::mtu;
     TransferData package;
     for (;;) {
         /* Read the package to the buffer from the TUN */
-        const int package_size = tun->Read(package.data, MTU);
+        const int32_t package_size = tun->Read(package.data, MTU);
 
         /* Cast the buffer to the ip header struct */
         const iphdr* const ip_header = (iphdr*)(void*)package.data;
