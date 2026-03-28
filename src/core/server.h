@@ -4,6 +4,7 @@
 #include "core/keys.h"
 #include "core/tun.h"
 #include "package/get_peer_request.h"
+#include "package/get_peer_response.h"
 #include "package/handshake_request.h"
 #include "package/handshake_response.h"
 #include "package/keep_alive.h"
@@ -39,7 +40,7 @@ public:
 
     static void HandleTunPackage(TransferData& package,
                                  int32_t package_size,
-                                 uint32_t destination_netb) noexcept;
+                                 uint32_t destination_ip) noexcept;
 
 private:
     struct Peers final {
@@ -52,13 +53,14 @@ private:
         } __attribute__((aligned(128)));
 
         static inline uint32_t number = 0;
-        static inline LinkedList<const uint8_t*>*
-            public_keys = nullptr;
-        static inline Dictionary<uint32_t, Details, uint32_t>*
-            details = nullptr;
+        static inline LinkedList<const uint8_t*>* public_keys =
+            nullptr;
+        static inline Dictionary<uint32_t, Details, uint32_t>* details =
+            nullptr;
         static inline std::shared_mutex details_mutex;
-        static inline Dictionary<KeyBuffer, uint64_t, uint32_t>*
-            timestamps = nullptr;
+        static inline Dictionary<KeyBuffer, uint64_t, uint32_t>* timestamps =
+            nullptr;
+        static inline std::mutex timestamps_mutex;
     };
 
     static void HandleHandshakeRequest(
@@ -118,7 +120,7 @@ FORCE_INLINE void Server::Init() {
 
     /* Fill timestamps dictionary with zeros */
     for (const uint8_t* public_key : *Peers::public_keys)
-        Peers::timestamps->Put(public_key, 0UL);
+        Peers::timestamps->Put(public_key, 0ULL);
 
     /* Add server to the peers list */
     Peers::details->Put(local_ip.Netb(), { .nonce = nullptr });
@@ -126,15 +128,15 @@ FORCE_INLINE void Server::Init() {
 
 FORCE_INLINE void Server::HandleTunPackage(TransferData& package,
                                            const int32_t package_size,
-                                           const uint32_t destination_netb)
+                                           const uint32_t destination_ip)
 noexcept {
     /* Try to get the peers details */
     std::shared_lock details_lock(Peers::details_mutex);
-    Peers::Details* const details = Peers::details->Get(destination_netb);
+    Peers::Details* const details = Peers::details->Get(destination_ip);
     if (details == nullptr) return;
 
     /* Update the package header */
-    package.UpdateHeader(details->nonce, destination_netb, Time::Nanoseconds());
+    package.UpdateHeader(details->nonce, destination_ip, Time::Nanoseconds());
 
     /* Encrypt the package */
     unsigned long long data_size;
@@ -270,6 +272,7 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
         if (delta_time > 120) return;
 
         /* Get the last timestamp for such a key */
+        std::lock_guard timestamps_lock(Peers::timestamps_mutex);
         uint64_t* const last_timestamp =
             Peers::timestamps->Get(package->data.static_public_key);
 
@@ -312,24 +315,28 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
             /* Try to get the random ip in the local network */
             const uint32_t start = network_prefix.Hostb();
             const uint32_t end = broadcast.Hostb();
-            const uint32_t random_ip =
-                (uint32_t)(start + (rand() % (end - start + 1)));
-            const uint32_t random_ip_netb = htonl(random_ip);
-            if (!Peers::details->Has(random_ip_netb)) {
-                response_ip = random_ip_netb;
+            NetAddr random_ip; random_ip.SetHostb(
+                (uint32_t)(start + (rand() % (end - start + 1)))
+            );
+
+            /* Try to get that ip from the details list */
+            if (!Peers::details->Has(random_ip.Netb())) {
+                response_ip = random_ip.Netb();
                 goto the_end;
             }
 
-            /* Try to get the free ip */
-            for (uint32_t ip = random_ip; ip < end; ++ip) {
-                const uint32_t ip_netb = htonl(ip);
+            /* If the random ip is busy, try to get the free ip */
+            for (uint32_t ip_hostb = random_ip.Hostb();
+                 ip_hostb < end; ++ip_hostb) {
+                const uint32_t ip_netb = htonl(ip_hostb);
                 if (!Peers::details->Has(ip_netb)) {
                     response_ip = ip_netb;
                     goto the_end;
                 }
             }
-            for (uint32_t ip = random_ip; ip > start; --ip) {
-                const uint32_t ip_netb = htonl(ip);
+            for (uint32_t ip_hostb = random_ip.Hostb();
+                 ip_hostb > start; --ip_hostb) {
+                const uint32_t ip_netb = htonl(ip_hostb);
                 if (!Peers::details->Has(ip_netb)) {
                     response_ip = ip_netb;
                     goto the_end;
@@ -425,16 +432,16 @@ FORCE_INLINE void Server::HandleTransferData(
     if (destination_netb == local_ip.Netb()) {
         /* Try to get the key to decrypt the package */
         std::shared_lock details_lock(Peers::details_mutex);
-        Peers::Details* const peers_details =
+        Peers::Details* const source_peer_details =
             Peers::details->Get(package->header.source_ip);
-        if (peers_details == nullptr) { return; }
+        if (source_peer_details == nullptr) { return; }
 
         /* Get the package timestamp */
         uint64_t package_timestamp = package->header.timestamp;
 
         /* Decrypt the package */
         unsigned long long data_size;
-        if (package_timestamp <= peers_details->last_timestamp ||
+        if (package_timestamp <= source_peer_details->last_timestamp ||
             crypto_aead_chacha20poly1305_ietf_decrypt(
             (uint8_t*)package->data,
             &data_size,
@@ -444,18 +451,18 @@ FORCE_INLINE void Server::HandleTransferData(
             (uint8_t*)(void*)&package->header,
             sizeof(package->header),
             package->header.nonce,
-            peers_details->chain_key
+            source_peer_details->chain_key
         ) != 0) {
             WARN_LOG("Forged message found");
             return;
         }
 
         /* Update the endpoint */
-        if (!equal(peers_details->endpoint, from))
-            peers_details->endpoint = from;
+        if (!equal(source_peer_details->endpoint, from))
+            source_peer_details->endpoint = from;
 
         /* Update the last timestamp */
-        peers_details->last_timestamp = package_timestamp;
+        source_peer_details->last_timestamp = package_timestamp;
 
         /* Get the real destination address */
         destination_netb = ((iphdr*)(void*)package->data)->daddr;
@@ -468,16 +475,16 @@ FORCE_INLINE void Server::HandleTransferData(
         }
 
         /* If we need to resend the package to the other peer */
-        Peers::Details* const peer_details =
+        Peers::Details* const dest_peer_details =
             Peers::details->Get(destination_netb);
-        if (peer_details == nullptr) return;
+        if (dest_peer_details == nullptr) return;
 
         TRACE_LOG("Resend the package to the %s:%hu",
-                  inet_ntoa(peer_details->endpoint.sin_addr),
-                  ntohs(peer_details->endpoint.sin_port));
+                  inet_ntoa(dest_peer_details->endpoint.sin_addr),
+                  ntohs(dest_peer_details->endpoint.sin_port));
 
         /* Update the package header */
-        package->UpdateHeader(peer_details->nonce,
+        package->UpdateHeader(dest_peer_details->nonce,
                               destination_netb,
                               Time::Nanoseconds());
 
@@ -491,13 +498,13 @@ FORCE_INLINE void Server::HandleTransferData(
             sizeof(package->header),
             nullptr,
             package->header.nonce,
-            peer_details->chain_key
+            dest_peer_details->chain_key
         );
 
         /* Send the encrypted package */
         main_socket.Send((char*)(void*)package,
                          package_size,
-                         peer_details->endpoint);
+                         dest_peer_details->endpoint);
     /* If we need to transit the package */
     } else {
         /* Try to get the peer endpoint */
@@ -528,16 +535,16 @@ FORCE_INLINE void Server::HandleKeepAlive(
 
     /* Try to get the key to decrypt the package */
     std::shared_lock details_lock(Peers::details_mutex);
-    Peers::Details* const peers_details =
+    Peers::Details* const peer_details =
         Peers::details->Get(package->header.source_ip);
-    if (peers_details == nullptr) { return; }
+    if (peer_details == nullptr) { return; }
 
     /* Get the package timestamp */
     const uint64_t package_timestamp = package->header.timestamp;
 
     /* Decrypt the package */
     unsigned long long data_size;
-    if (package_timestamp <= peers_details->last_timestamp ||
+    if (package_timestamp <= peer_details->last_timestamp ||
         crypto_aead_chacha20poly1305_ietf_decrypt(
         (uint8_t*)package->data,
         &data_size,
@@ -547,7 +554,7 @@ FORCE_INLINE void Server::HandleKeepAlive(
         (uint8_t*)(void*)&package->header,
         sizeof(package->header),
         package->header.nonce,
-        peers_details->chain_key
+        peer_details->chain_key
     ) != 0) {
         WARN_LOG("Forged message found");
         return;
@@ -555,10 +562,10 @@ FORCE_INLINE void Server::HandleKeepAlive(
     details_lock.unlock();
 
     /* Update the endpoint */
-    if (!equal(peers_details->endpoint, from)) peers_details->endpoint = from;
+    if (!equal(peer_details->endpoint, from)) peer_details->endpoint = from;
 
     /* Update the last timestamp */
-    peers_details->last_timestamp = package_timestamp;
+    peer_details->last_timestamp = package_timestamp;
 }
 
 FORCE_INLINE void Server::HandleGetPeerRequest(
@@ -572,16 +579,19 @@ FORCE_INLINE void Server::HandleGetPeerRequest(
 
     /* Try to get the key to decrypt the package */
     std::shared_lock details_lock(Peers::details_mutex);
-    const Peers::Details* const peers_details =
+    Peers::Details* const source_peer_details =
         Peers::details->Get(package->header.source_ip);
-    if (peers_details == nullptr) { return; }
+    if (source_peer_details == nullptr) { return; }
 
     /* Check the endpoint */
-    if (!equal(peers_details->endpoint, from)) return;
+    if (!equal(source_peer_details->endpoint, from)) return;
+
+    /* Get the package timestamp */
+    const uint64_t package_timestamp = package->header.timestamp;
 
     /* Decrypt the package */
     unsigned long long data_size;
-    if (package->header.timestamp <= peers_details->last_timestamp ||
+    if (package_timestamp <= source_peer_details->last_timestamp ||
         crypto_aead_chacha20poly1305_ietf_decrypt(
         (uint8_t*)(void*)&package->data,
         &data_size,
@@ -591,15 +601,40 @@ FORCE_INLINE void Server::HandleGetPeerRequest(
         (uint8_t*)(void*)&package->header,
         sizeof(package->header),
         package->header.nonce,
-        peers_details->chain_key
+        source_peer_details->chain_key
     ) != 0) {
         WARN_LOG("Forged message found");
         return;
     }
-    details_lock.unlock();
 
-    /* Get the address */
+    /* Update the endpoint */
+    if (!equal(source_peer_details->endpoint, from))
+        source_peer_details->endpoint = from;
 
-    /* Assemble the response package */
+    /* Update the last timestamp */
+    source_peer_details->last_timestamp = package_timestamp;
 
+    /* Get the peer local ip */
+    uint32_t peer_ip = package->data.requested_peer_ip;
+
+    /* Get the requested peer */
+    Peers::Details* const requested_peer_details =
+        Peers::details->Get(peer_ip);
+
+    /* Assemble the response */
+    GetPeerResponse response(source_peer_details->nonce, peer_ip);
+
+    /* If there is no such a peer */
+    if (requested_peer_details == nullptr)
+        response.SetData({ .sin_port = 0, .sin_addr = INADDR_ANY }, nullptr);
+    /* If we have a peer with such an ip */
+    else
+        response.SetData(requested_peer_details->endpoint,
+                         requested_peer_details->static_public_key);
+
+    /* Send the response to the client */
+    INFO_LOG("Sending the get peer response to the %s:%hu",
+             inet_ntoa(from.sin_addr),
+             ntohs(from.sin_port));
+    main_socket.Send((char*)(void*)&response, sizeof(response), from);
 }
