@@ -58,8 +58,10 @@ private:
     struct Peers final {
         struct Details final {
             sockaddr_in endpoint;
-            uint64_t last_package_timestamp;
-            uint8_t key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
+            uint64_t last_to_package_timestamp;
+            uint64_t last_from_package_timestamp;
+            uint8_t chain_key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
+            uint8_t public_static_key[crypto_scalarmult_BYTES];
             UniqPtr<Nonce> nonce;
         } __attribute__((aligned(64)));
 
@@ -215,10 +217,10 @@ FORCE_INLINE void Client::RunHandlePackagesLoop() noexcept {
 }
 
 FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
-    /* Check last packages timestamps every 10 seconds */
+    /* Check last packages timestamps every 5 seconds */
     for (;;) {
-        /* Sleep for 10 seconds */
-        usleep(10 * 1'000'000);
+        /* Sleep for 5 seconds */
+        usleep(5 * 1'000'000);
 
         /* Get the current timestamp */
         uint64_t timestamp = Time::Nanoseconds();
@@ -234,8 +236,8 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
                 server_details = Peers::details->Get(Server::local_ip);
             }
             if (server_details == nullptr) continue;
-            if (timestamp - server_details->last_package_timestamp >=
-                15 * 1'000'000'000ULL) {
+            if (timestamp - server_details->last_to_package_timestamp >=
+                10 * 1'000'000'000ULL) {
                 /* Assemble the package and decrypt it */
                 KeepAlive keep_alive(Server::nonce, timestamp);
                 unsigned long long data_size;
@@ -248,7 +250,7 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
                     sizeof(keep_alive.header),
                     nullptr,
                     keep_alive.header.nonce,
-                    server_details->key
+                    server_details->chain_key
                 );
 
                 /* Send the keep-alive */
@@ -258,7 +260,7 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
                                  Server::endpoint);
 
                 /* Update the last package timestamp */
-                server_details->last_package_timestamp = timestamp;
+                server_details->last_to_package_timestamp = timestamp;
             }
         }
 
@@ -268,8 +270,8 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
             if (::equal(peer_details.endpoint, Server::endpoint)) continue;
 
             /* If the endpoint is no the server, check the last package time */
-            if (timestamp - peer_details.last_package_timestamp <
-                15 * 1'000'000'000ULL) continue;
+            if (timestamp - peer_details.last_to_package_timestamp <
+                10 * 1'000'000'000ULL) continue;
             /* Assebmle the package and decrypt it */
             KeepAlive keep_alive(peer_details.nonce, timestamp);
             unsigned long long data_size;
@@ -282,7 +284,7 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
                 sizeof(keep_alive.header),
                 nullptr,
                 keep_alive.header.nonce,
-                peer_details.key
+                peer_details.chain_key
             );
 
             /* If all is OK, send the keep alive */
@@ -294,7 +296,7 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
                              peer_details.endpoint);
 
             /* Update the last package timestamp */
-            peer_details.last_package_timestamp = timestamp;
+            peer_details.last_to_package_timestamp = timestamp;
         }
     }
 }
@@ -332,7 +334,7 @@ noexcept {
     package.UpdateHeader(peer_details->nonce, destination_netb, timestamp);
 
     /* Update the last package timestamp */
-    peer_details->last_package_timestamp = timestamp;
+    peer_details->last_to_package_timestamp = timestamp;
 
     /* Encrypt the package */
     unsigned long long data_size;
@@ -345,7 +347,7 @@ noexcept {
         sizeof(package.header),
         nullptr,
         package.header.nonce,
-        peer_details->key
+        peer_details->chain_key
     );
 
     /* Send the encrypted message */
@@ -419,10 +421,10 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
             /* Assemble the new details */
             Peers::Details details = {
                 .endpoint = Server::endpoint,
-                .last_package_timestamp = Time::Nanoseconds(),
+                .last_to_package_timestamp = Time::Nanoseconds(),
                 .nonce = Server::nonce
             };
-            memcpy(details.key, Server::chain_key,
+            memcpy(details.chain_key, Server::chain_key,
                    crypto_aead_chacha20poly1305_ietf_KEYBYTES);
 
             /* Put the new data to the lists dictionary */
@@ -431,7 +433,7 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
         /* Otherwise, update the existing details */
         } else {
             server_details->nonce = Server::nonce;
-            memcpy(server_details->key, Server::chain_key,
+            memcpy(server_details->chain_key, Server::chain_key,
                    crypto_aead_chacha20poly1305_ietf_KEYBYTES);
         }
     }
@@ -480,7 +482,7 @@ FORCE_INLINE void Client::HandleTransferData(
         (uint8_t*)(void*)&package->header,
         sizeof(package->header),
         package->header.nonce,
-        peers_details->key
+        peers_details->chain_key
     ) != 0) {
         WARN_LOG("Forged message found");
         return;
