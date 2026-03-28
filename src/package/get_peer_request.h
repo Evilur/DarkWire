@@ -16,7 +16,7 @@ struct GetPeerRequest final {
         uint64_t timestamp;
     } __attribute__((packed)) header;
     struct {
-        uint32_t destination_ip;
+        uint32_t requested_peer_ip;
     } __attribute__((packed)) data;
     uint8_t poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
@@ -38,5 +38,5 @@ FORCE_INLINE GetPeerRequest::GetPeerRequest(Nonce* const nonce,
     header.timestamp = Time::Nanoseconds();
 
     /* Set the peer's ip */
-    data.destination_ip = peer_ip;
+    data.requested_peer_ip = peer_ip;
 }

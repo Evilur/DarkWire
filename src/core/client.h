@@ -4,6 +4,7 @@
 #include "core/config.h"
 #include "core/keys.h"
 #include "core/tun.h"
+#include "package/get_peer_request.h"
 #include "package/handshake_request.h"
 #include "package/handshake_response.h"
 #include "package/keep_alive.h"
@@ -42,7 +43,7 @@ public:
 
     static void HandleTunPackage(TransferData& package,
                                  int32_t package_size,
-                                 uint32_t destination_netb) noexcept;
+                                 uint32_t destination_ip) noexcept;
 
 private:
     struct Server final {
@@ -56,6 +57,8 @@ private:
     };
 
     struct Peers final {
+        enum NatThroughType : uint8_t { UNDEFINED, PROBING, DIRECT, RELAY };
+
         struct Details final {
             sockaddr_in endpoint;
             uint64_t last_to_package_timestamp;
@@ -63,12 +66,14 @@ private:
             uint8_t chain_key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
             uint8_t public_static_key[crypto_scalarmult_BYTES];
             UniqPtr<Nonce> nonce;
-        } __attribute__((aligned(64)));
+        } __attribute__((aligned(128)));
 
-        static inline Dictionary<uint32_t,
-                                 Details,
-                                 uint8_t>* details = nullptr;
+        static inline Dictionary<uint32_t, Details, uint8_t>* details =
+            nullptr;
         static inline std::shared_mutex details_mutex;
+        static inline Dictionary<uint32_t, NatThroughType, uint8_t>*
+            nat_throughs = nullptr;
+        static inline std::shared_mutex nat_though_mutex;
     };
 
     static inline uint64_t _next_handshake_timestamp =
@@ -86,7 +91,7 @@ private:
         sockaddr_in from
     ) noexcept;
 
-    static void GetPeerFromServer(uint32_t ip_netb) noexcept;
+    static void GetPeerFromServer(uint32_t peer_ip) noexcept;
 };
 
 FORCE_INLINE void Client::Init() {
@@ -113,9 +118,10 @@ FORCE_INLINE void Client::Init() {
                       sodium_base64_VARIANT_ORIGINAL);
 
     /* Allocate memory for peers */
-    Peers::details = new Dictionary<uint32_t,
-                                    Peers::Details,
-                                    uint8_t>(16);
+    Peers::details =
+        new Dictionary<uint32_t, Peers::Details, uint8_t>(16);
+    Peers::nat_throughs =
+        new Dictionary<uint32_t, Peers::NatThroughType, uint8_t>(16);
 }
 
 FORCE_INLINE void Client::RunHandshakeLoop() {
@@ -303,21 +309,28 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
 
 FORCE_INLINE void Client::HandleTunPackage(TransferData& package,
                                            const int32_t package_size,
-                                           uint32_t destination_netb)
+                                           uint32_t destination_ip)
 noexcept {
     /* Get the current timestamp */
     const uint64_t timestamp = Time::Nanoseconds();
 
     /* Try to get the details from the peers list */
     std::shared_lock details_lock(Peers::details_mutex);
-    Peers::Details* peer_details = Peers::details->Get(destination_netb);
+    Peers::Details* peer_details = Peers::details->Get(destination_ip);
 
     /* If there is no such a peer, get the server peer */
     if (peer_details == nullptr) {
         /* Try to get the peer from the server
          * (If we didn't do that yet) */
-        if ((destination_netb & binmask.Netb()) == network_prefix.Netb()) {
-            //std::thread(GetPeerFromServer, destination_netb).detach();
+        {
+            std::shared_lock nat_through_lock(Peers::nat_though_mutex);
+            if ((destination_ip & binmask.Netb()) == network_prefix.Netb() &&
+                !Peers::nat_throughs->Has(destination_ip)) {
+                nat_through_lock.unlock();
+                std::unique_lock nat_trough_uniq_lock(Peers::nat_though_mutex);
+                Peers::nat_throughs->Put(destination_ip, Peers::UNDEFINED);
+                std::thread(GetPeerFromServer, destination_ip).detach();
+            }
         }
 
         /* Get the server peer */
@@ -326,12 +339,12 @@ noexcept {
             peer_details = Peers::details->Get(Server::local_ip);
             if (peer_details == nullptr) return;
             /* Set the destination ip */
-            destination_netb = Server::local_ip;
+            destination_ip = Server::local_ip;
         }
     }
 
     /* Update the package header */
-    package.UpdateHeader(peer_details->nonce, destination_netb, timestamp);
+    package.UpdateHeader(peer_details->nonce, destination_ip, timestamp);
 
     /* Update the last package timestamp */
     peer_details->last_to_package_timestamp = timestamp;
@@ -492,5 +505,46 @@ FORCE_INLINE void Client::HandleTransferData(
     tun->Write(package->data, (uint32_t)data_size);
 }
 
-FORCE_INLINE void Client::GetPeerFromServer(const uint32_t ip_netb)
-noexcept { }
+FORCE_INLINE void Client::GetPeerFromServer(const uint32_t peer_ip)
+noexcept {
+    std::shared_lock nat_through_lock(Peers::nat_though_mutex);
+    Peers::NatThroughType* nat_though_type = nullptr;
+    do {
+        nat_through_lock.unlock();
+
+        /* Assemble the response package */
+        GetPeerRequest package(Server::nonce, peer_ip);
+
+        /* Encrypt the package */
+        {
+            std::lock_guard server_mutex(Server::mutex);
+            unsigned long long dummy_len;
+            crypto_aead_chacha20poly1305_ietf_encrypt(
+                (uint8_t*)(void*)&package.data,
+                &dummy_len,
+                (uint8_t*)(void*)&package.data,
+                sizeof(package.data),
+                (uint8_t*)(void*)&package.header,
+                sizeof(package.header),
+                nullptr,
+                package.header.nonce,
+                Server::chain_key
+            );
+
+            /* Send the package to the server */
+            INFO_LOG("Sending get '%s' peer package", inet_ntoa({ peer_ip }));
+            main_socket.Send((char*)(void*)&package,
+                             sizeof(package),
+                             Server::endpoint);
+        }
+
+        /* Wait for 6 seconds */
+        usleep(6 * 1'000'000);
+
+        /* Get the nat through type */
+        nat_through_lock.lock();
+        nat_though_type = Peers::nat_throughs->Get(peer_ip);
+    /* While we have not got the response */
+    } while (nat_though_type != nullptr &&
+             *nat_though_type == Peers::UNDEFINED);
+}
