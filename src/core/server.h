@@ -127,7 +127,7 @@ noexcept {
     if (details == nullptr) return;
 
     /* Update the package header */
-    package.UpdateHeader(details->nonce, destination_netb);
+    package.UpdateHeader(details->nonce, destination_netb, Time::Nanoseconds());
 
     /* Encrypt the package */
     unsigned long long data_size;
@@ -142,7 +142,6 @@ noexcept {
         package.header.nonce,
         details->chain_key
     );
-    details_lock.unlock();
 
     /* Send the encrypted message */
     main_socket.Send((char*)(void*)&package,
@@ -472,11 +471,10 @@ FORCE_INLINE void Server::HandleTransferData(
                   inet_ntoa(peer_details->endpoint.sin_addr),
                   ntohs(peer_details->endpoint.sin_port));
 
-        /* Update the nonce and the source ip */
-        peer_details->nonce->Copy(package->header.nonce);
-        package->header.source_ip = local_ip.Netb();
         /* Update the package header */
-        package->UpdateHeader(peer_details->nonce, destination_netb);
+        package->UpdateHeader(peer_details->nonce,
+                              destination_netb,
+                              Time::Nanoseconds());
 
         /* Encrypt the package */
         crypto_aead_chacha20poly1305_ietf_encrypt(
@@ -548,7 +546,6 @@ FORCE_INLINE void Server::HandleGetPeerRequest(
         WARN_LOG("Forged message found");
         return;
     }
-    details_lock.unlock();
 
     /* Get the address */
 

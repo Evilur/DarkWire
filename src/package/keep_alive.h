@@ -1,21 +1,34 @@
 #pragma once
 
+#include "main.h"
 #include "package_type.h"
 #include "util/macro.h"
+#include "util/nonce.h"
 
-#include <cstring>
 #include <sodium.h>
 
 struct KeepAlive final {
     struct {
         PackageType type;
+        uint8_t nonce[crypto_aead_chacha20poly1305_NPUBBYTES];
+        uint32_t source_ip;
+        uint64_t timestamp;
     } __attribute__((packed)) header;
-    char data[5];
 
-    explicit KeepAlive() noexcept;
+    explicit KeepAlive(Nonce* nonce, uint64_t timestamp) noexcept;
 } __attribute__((packed));
 
-FORCE_INLINE KeepAlive::KeepAlive() noexcept {
+FORCE_INLINE KeepAlive::KeepAlive(Nonce* const nonce,
+                                  const uint64_t timestamp) noexcept {
+    /* Set the package */
     header.type = KEEPALIVE;
-    memcpy(data, "ALIVE", 5);
+
+    /* Set the nonce */
+    nonce->Copy(header.nonce);
+
+    /* Set the source ip */
+    header.source_ip = local_ip.Netb();
+
+    /* Set the timestamp */
+    header.timestamp = timestamp;
 }

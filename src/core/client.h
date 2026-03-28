@@ -4,7 +4,6 @@
 #include "core/config.h"
 #include "core/keys.h"
 #include "core/tun.h"
-#include "package/get_peer_request.h"
 #include "package/handshake_request.h"
 #include "package/handshake_response.h"
 #include "package/keep_alive.h"
@@ -19,7 +18,6 @@
 
 #include <cstring>
 #include <ctime>
-#include <mutex>
 #include <netinet/in.h>
 #include <shared_mutex>
 #include <sodium.h>
@@ -50,7 +48,7 @@ private:
     struct Server final {
         static inline Nonce* nonce;
         static inline sockaddr_in endpoint;
-        static inline uint32_t local_ip_netb;
+        static inline uint32_t local_ip;
         static inline uint8_t* public_key = nullptr;
         static inline uint8_t* chain_key = nullptr;
         static inline UniqPtr<Keys> ephemeral_keys = nullptr;
@@ -69,10 +67,6 @@ private:
                                  Details,
                                  uint8_t>* details = nullptr;
         static inline std::shared_mutex details_mutex;
-        static inline Dictionary<uint32_t,
-                                 uint8_t,
-                                 uint8_t>* ping_response_numbers = nullptr;
-        static inline std::mutex hole_punching_mutex;
     };
 
     static inline uint64_t _next_handshake_timestamp =
@@ -120,9 +114,6 @@ FORCE_INLINE void Client::Init() {
     Peers::details = new Dictionary<uint32_t,
                                     Peers::Details,
                                     uint8_t>(16);
-    Peers::ping_response_numbers = new Dictionary<uint32_t,
-                                                  uint8_t,
-                                                  uint8_t>(16);
 }
 
 FORCE_INLINE void Client::RunHandshakeLoop() {
@@ -132,13 +123,12 @@ FORCE_INLINE void Client::RunHandshakeLoop() {
         const uint64_t current_time = std::time(nullptr);
         if (current_time < _next_handshake_timestamp) {
             usleep((uint32_t)(_next_handshake_timestamp - current_time)
-                   * 1000 * 1000);
+                   * 1'000'000);
             continue;
         }
 
         /* Lock the server */
-        Server::mutex.unlock();
-        Server::mutex.lock();
+        std::lock_guard server_lock(Server::mutex);
         INFO_LOG("Sending a handshake request to the server");
 
         /* Generate the ephemeral keys pair */
@@ -210,7 +200,7 @@ FORCE_INLINE void Client::RunHandlePackagesLoop() noexcept {
 #define HANDLE_PACKAGE(T)                                                     \
         {                                                                     \
             T* const package = (T*)(void*)buffer;                             \
-            Handle##T(package, (uint32_t)buffer_size, from);              \
+            Handle##T(package, (uint32_t)buffer_size, from);                  \
             continue;                                                         \
         }
 
@@ -225,15 +215,54 @@ FORCE_INLINE void Client::RunHandlePackagesLoop() noexcept {
 }
 
 FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
-    const KeepAlive keepalive_package;
-
-    /* Send keep-alive package every 30 seconds */
+    /* Check last packages timestamps every 10 seconds */
     for (;;) {
-        usleep(30 * 1000 * 1000);
-        INFO_LOG("Send keep-alive package to the server");
-        main_socket.Send((const char*)(const void*)&keepalive_package,
-                         sizeof(keepalive_package),
-                         Server::endpoint);
+        /* Sleep for 8 seconds */
+        usleep(10 * 1'000'000);
+
+        /* Get the current timestamp */
+        uint64_t timestamp = Time::Nanoseconds();
+
+        /* Send the keep alive package to the server */
+        std::shared_lock details_lock(Peers::details_mutex);
+
+        /* Check the last package timestamp and send the keep-alive */
+        Peers::Details* server_details = nullptr;
+        {
+            std::lock_guard server_lock(Server::mutex);
+            server_details = Peers::details->Get(Server::local_ip);
+        }
+        if (server_details == nullptr) continue;
+        if (timestamp - server_details->last_package_timestamp >=
+            15 * 1'000'000'000ULL) {
+            INFO_LOG("Sending keep-alive package to the server");
+            KeepAlive keep_alive(Server::nonce, timestamp);
+            main_socket.Send((const char*)(const void*)&keep_alive,
+                             sizeof(keep_alive),
+                             Server::endpoint);
+        }
+
+        /* Send keep-alive packages to all the active peers */
+        for (auto& [ _, peer_details ] : *Peers::details) {
+            /* Check for server as relay */
+            if (::equal(peer_details.endpoint, Server::endpoint)) continue;
+
+            /* If the endpoint is no the server, check the last package time */
+            if (timestamp - peer_details.last_package_timestamp <
+                15 * 1'000'000'000ULL) continue;
+
+            /* If all is OK, send the keep alive */
+            TRACE_LOG("Sending keep-alive package to the %s:%hu",
+                      inet_ntoa(peer_details.endpoint.sin_addr),
+                      ntohs(peer_details.endpoint.sin_port));
+            KeepAlive keep_alive(peer_details.nonce, timestamp);
+            main_socket.Send((const char*)(const void*)&keep_alive,
+                             sizeof(keep_alive),
+                             peer_details.endpoint);
+        }
+
+        /* Unlock the lock */
+        details_lock.unlock();
     }
 }
 
@@ -241,48 +270,36 @@ FORCE_INLINE void Client::HandleTunPackage(TransferData& package,
                                            const int32_t package_size,
                                            uint32_t destination_netb)
 noexcept {
-    /* Init endpoint, key and nonce variables */
-    sockaddr_in endpoint;
-    const uint8_t* key;
-    Nonce* nonce;
+    /* Get the current timestamp */
+    const uint64_t timestamp = Time::Nanoseconds();
 
-    {
-        /* Try to get the details from the peers list */
-        std::shared_lock details_lock(Peers::details_mutex);
-        Peers::Details* const details = Peers::details->Get(destination_netb);
+    /* Try to get the details from the peers list */
+    std::shared_lock details_lock(Peers::details_mutex);
+    Peers::Details* peer_details = Peers::details->Get(destination_netb);
 
-        /* If there is such and ip in the dictionary */
-        if (details != nullptr) {
-            endpoint = details->endpoint;
-            key = details->key;
-            nonce = details->nonce;
-            /* If there is no such an ip in the dictionary */
-        } else {
-            /* Try to get the peer from the server
-             * (If we didn't do that yet) */
-            {
-                std::lock_guard hole_punching_lock(Peers::hole_punching_mutex);
-                if ((destination_netb & binmask.Netb()) ==
-                    network_prefix.Netb() &&
-                    !Peers::ping_response_numbers->Has(destination_netb)) {
-                    Peers::ping_response_numbers->Put(destination_netb, -1);
-                    std::thread(GetPeerFromServer, destination_netb).detach();
-                }
-            }
+    /* If there is no such a peer, get the server peer */
+    if (peer_details == nullptr) {
+        /* Try to get the peer from the server
+         * (If we didn't do that yet) */
+        if ((destination_netb & binmask.Netb()) == network_prefix.Netb()) {
+            //std::thread(GetPeerFromServer, destination_netb).detach();
+        }
 
-            endpoint = Server::endpoint;
-            key = Server::chain_key;
-            nonce = Server::nonce;
-            destination_netb = Server::local_ip_netb;
+        /* Get the server peer */
+        {
+            std::lock_guard server_lock(Server::mutex);
+            peer_details = Peers::details->Get(Server::local_ip);
+            if (peer_details == nullptr) return;
+            /* Set the destination ip */
+            destination_netb = Server::local_ip;
         }
     }
 
-    TRACE_LOG("Sending the transfer data to the %s:%hu",
-              inet_ntoa(endpoint.sin_addr),
-              ntohs(endpoint.sin_port));
-
     /* Update the package header */
-    package.UpdateHeader(nonce, destination_netb);
+    package.UpdateHeader(peer_details->nonce, destination_netb, timestamp);
+
+    /* Update the last package timestamp */
+    peer_details->last_package_timestamp = timestamp;
 
     /* Encrypt the package */
     unsigned long long data_size;
@@ -295,13 +312,16 @@ noexcept {
         sizeof(package.header),
         nullptr,
         package.header.nonce,
-        key
+        peer_details->key
     );
 
     /* Send the encrypted message */
+    TRACE_LOG("Sending the transfer data package to the %s:%hu",
+              inet_ntoa(peer_details->endpoint.sin_addr),
+              ntohs(peer_details->endpoint.sin_port));
     main_socket.Send((char*)(void*)&package,
                      (int64_t)(sizeof(package.header) + data_size),
-                     endpoint);
+                     peer_details->endpoint);
 }
 
 FORCE_INLINE void Client::HandleHandshakeResponse(
@@ -310,6 +330,7 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
     const sockaddr_in from
 ) noexcept {
     /* If this package is not from the server */
+    std::lock_guard server_lock(Server::mutex);
     if (!equal(from, Server::endpoint)) return;
 
     /* Compute the second shared secret and update the chain key */
@@ -350,35 +371,22 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
         return;
     };
 
-    /* If there is the first handshake */
-    if (!tun->IsUp()) {
-        /* Set the ip and the netmask */
-        local_ip.SetNetb(package->data.local_ip);
-        netmask = package->data.netmask;
-
-        /* Calculate net-specific variables */
-        calc_net();
-
-        /* Up the interface */
-        tun->Up();
-    }
-
     /* Save the server's local ip */
-    Server::local_ip_netb = package->data.server_local_ip;
+    Server::local_ip = package->data.server_local_ip;
 
     /* Add the server to the peers list */
     {
         /* Try to get the server from the peers dictionary */
         std::unique_lock details_lock(Peers::details_mutex);
         Peers::Details* const server_details =
-            Peers::details->Get(package->data.server_local_ip);
+            Peers::details->Get(Server::local_ip);
 
         /* If there is no server in the peers dictionary */
         if (server_details == nullptr) {
             /* Assemble the new details */
             Peers::Details details = {
                 .endpoint = Server::endpoint,
-                .last_package_timestamp = ULONG_MAX,
+                .last_package_timestamp = Time::Nanoseconds(),
                 .nonce = Server::nonce
             };
             memcpy(details.key, Server::chain_key,
@@ -395,10 +403,22 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
         }
     }
 
+    /* If there is the first handshake */
+    if (!tun->IsUp()) {
+        /* Set the ip and the netmask */
+        local_ip.SetNetb(package->data.local_ip);
+        netmask = package->data.netmask;
+
+        /* Calculate net-specific variables */
+        calc_net();
+
+        /* Up the interface */
+        tun->Up();
+    }
+
     /* If all is OK, next handshake will be after 3 minutes */
     INFO_LOG("The handshake response has been successfully handled");
     _next_handshake_timestamp = (uint64_t)std::time(nullptr) + 180;
-    Server::mutex.unlock();
 }
 
 FORCE_INLINE void Client::HandleTransferData(
@@ -438,38 +458,4 @@ FORCE_INLINE void Client::HandleTransferData(
 }
 
 FORCE_INLINE void Client::GetPeerFromServer(const uint32_t ip_netb)
-noexcept {
-    std::shared_lock details_lock(Peers::details_mutex);
-    do {
-        INFO_LOG("Sending a get peer package for %s", inet_ntoa({ ip_netb }));
-
-        /* Assemble the package */
-        details_lock.unlock();
-        std::unique_lock server_lock(Server::mutex);
-        GetPeerRequest package(Server::nonce, ip_netb);
-
-        /* Encrypt the package */
-        unsigned long long data_size;
-        crypto_aead_chacha20poly1305_ietf_encrypt(
-            (uint8_t*)(void*)&package.data,
-            &data_size,
-            (uint8_t*)(void*)&package.data,
-            sizeof(package.data),
-            (uint8_t*)(void*)&package.header,
-            sizeof(package.header),
-            nullptr,
-            package.header.nonce,
-            Server::chain_key
-        );
-        server_lock.unlock();
-
-        /* Send the encrypted message */
-        main_socket.Send((char*)(void*)&package,
-                         (int64_t)(data_size + sizeof(package.header)),
-                         Server::endpoint);
-
-        /* Wait for 6 seconds and retry */
-        usleep(6 * 1000 * 1000);
-        details_lock.lock();
-    } while (!Peers::details->Has(ip_netb));
-}
+noexcept { }
