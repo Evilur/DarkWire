@@ -3,9 +3,11 @@
 #include "main.h"
 #include "core/keys.h"
 #include "core/tun.h"
+#include "package/changed_ip.h"
 #include "package/get_peer_request.h"
 #include "package/handshake_request.h"
 #include "package/handshake_response.h"
+#include "package/keep_alive.h"
 #include "package/package_type.h"
 #include "package/transfer_data.h"
 #include "socket/udp_socket.h"
@@ -63,20 +65,29 @@ private:
     static void HandleHandshakeRequest(
         HandshakeRequest* package,
         uint32_t package_size,
-        sockaddr_in from
+        const sockaddr_in& from
     );
 
     static void HandleTransferData(
         TransferData* package,
         uint32_t package_size,
-        sockaddr_in from
+        const sockaddr_in& from
+    ) noexcept;
+
+    static void HandleKeepAlive(
+        KeepAlive* package,
+        uint32_t package_size,
+        const sockaddr_in& from
     ) noexcept;
 
     static void HandleGetPeerRequest(
         GetPeerRequest* package,
         uint32_t package_size,
-        sockaddr_in from
+        const sockaddr_in& from
     ) noexcept;
+
+    static void SendChangedIPPackage(uint32_t ip,
+                                     Peers::Details* peer_details) noexcept;
 };
 
 FORCE_INLINE void Server::SavePeer(const uint8_t* const public_key) {
@@ -172,24 +183,26 @@ FORCE_INLINE void Server::RunHandlePackagesLoop() noexcept {
         {                                                                     \
             T* const package = (T*)(void*)buffer;                             \
             Handle##T(package, (uint32_t)buffer_size, from);                  \
-            continue;                                                         \
         }
 
         /* Handle the package by its type */
-        if (type == HANDSHAKE_REQUEST)
-            if (buffer_size == sizeof(HandshakeRequest))
-                HANDLE_PACKAGE(HandshakeRequest);
         if (type == TRANSFER_DATA)
-            HANDLE_PACKAGE(TransferData);
-        if (type == GET_PEER_REQUEST)
-            HANDLE_PACKAGE(GetPeerRequest);
+            HANDLE_PACKAGE(TransferData)
+        else if (type == KEEPALIVE &&
+                 buffer_size == sizeof(KeepAlive))
+            HANDLE_PACKAGE(KeepAlive)
+        else if (type == HANDSHAKE_REQUEST &&
+                 buffer_size == sizeof(HandshakeRequest))
+                HANDLE_PACKAGE(HandshakeRequest)
+        else if (type == GET_PEER_REQUEST)
+            HANDLE_PACKAGE(GetPeerRequest)
     }
 }
 
 FORCE_INLINE void Server::HandleHandshakeRequest(
     HandshakeRequest* const package,
     const uint32_t package_size,
-    const sockaddr_in from
+    const sockaddr_in& from
 ) {
     INFO_LOG("Receive a handshake request from %s:%hu",
              inet_ntoa(from.sin_addr),
@@ -403,7 +416,7 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
 FORCE_INLINE void Server::HandleTransferData(
     TransferData* const package,
     const uint32_t package_size,
-    const sockaddr_in from
+    const sockaddr_in& from
 ) noexcept {
     TRACE_LOG("Receive a transfer data from the %s:%hu",
               inet_ntoa(from.sin_addr),
@@ -447,10 +460,13 @@ FORCE_INLINE void Server::HandleTransferData(
 
             /* Update the endpoint */
             peers_details->endpoint = from;
+
+            /* Send the changed ip package to the source */
+            SendChangedIPPackage(package->header.source_ip, peers_details);
         }
 
         /* Update the last timestamp */
-        peers_details->last_timestamp = package->header.timestamp;
+        peers_details->last_timestamp = package_timestamp;
 
         /* Get the real destination address */
         destination_netb = ((iphdr*)(void*)package->data)->daddr;
@@ -512,14 +528,66 @@ FORCE_INLINE void Server::HandleTransferData(
     }
 }
 
+FORCE_INLINE void Server::HandleKeepAlive(
+    KeepAlive* package,
+    const uint32_t package_size,
+    const sockaddr_in& from
+) noexcept {
+    INFO_LOG("Receive a keep-alive package from the %s:%hu",
+             inet_ntoa(from.sin_addr),
+             ntohs(from.sin_port));
+
+    /* Try to get the key to decrypt the package */
+    std::shared_lock details_lock(Peers::details_mutex);
+    Peers::Details* const peers_details =
+        Peers::details->Get(package->header.source_ip);
+    if (peers_details == nullptr) { return; }
+
+    /* Decrypt the package */
+    unsigned long long data_size;
+    if (crypto_aead_chacha20poly1305_ietf_decrypt(
+        (uint8_t*)(void*)&package->data,
+        &data_size,
+        nullptr,
+        (uint8_t*)(void*)&package->data,
+        sizeof(package->data),
+        (uint8_t*)(void*)&package->header,
+        sizeof(package->header),
+        package->header.nonce,
+        peers_details->chain_key
+    ) != 0) {
+        WARN_LOG("Forged message found");
+        return;
+    }
+    details_lock.unlock();
+
+    /* Get the package timestamp */
+    const uint64_t timestamp = package->data.timestamp;
+
+    /* Check the endpoint */
+    if (!equal(peers_details->endpoint, from)) {
+        /* Package timestamp cannot be less or equal last timestamp */
+        if (peers_details->last_timestamp >= timestamp) return;
+
+        /* Update the endpoint */
+        peers_details->endpoint = from;
+
+        /* Send the changed ip package to the source */
+        SendChangedIPPackage(package->header.source_ip, peers_details);
+    }
+
+    /* Update the last timestamp */
+    peers_details->last_timestamp = timestamp;
+}
+
 FORCE_INLINE void Server::HandleGetPeerRequest(
     GetPeerRequest* const package,
     const uint32_t package_size,
-    const sockaddr_in from
+    const sockaddr_in& from
 ) noexcept {
-    TRACE_LOG("Receive a get peer package from the %s:%hu",
-              inet_ntoa(from.sin_addr),
-              ntohs(from.sin_port));
+    INFO_LOG("Receive a get peer package from the %s:%hu",
+             inet_ntoa(from.sin_addr),
+             ntohs(from.sin_port));
 
     /* Try to get the key to decrypt the package */
     std::shared_lock details_lock(Peers::details_mutex);
@@ -537,7 +605,7 @@ FORCE_INLINE void Server::HandleGetPeerRequest(
         &data_size,
         nullptr,
         (uint8_t*)(void*)&package->data,
-        package_size - sizeof(package->header),
+        sizeof(package->data),
         (uint8_t*)(void*)&package->header,
         sizeof(package->header),
         package->header.nonce,
@@ -546,9 +614,40 @@ FORCE_INLINE void Server::HandleGetPeerRequest(
         WARN_LOG("Forged message found");
         return;
     }
+    details_lock.unlock();
 
     /* Get the address */
 
     /* Assemble the response package */
 
+}
+
+FORCE_INLINE
+void Server::SendChangedIPPackage(const uint32_t ip,
+                                  Peers::Details* const peer_details)
+noexcept {
+    /* Assemble the package */
+    ChangedIP package(peer_details->nonce, ip);
+
+    /* Encrypt the package */
+    unsigned long long data_size;
+    if (crypto_aead_chacha20poly1305_ietf_encrypt(
+        (uint8_t*)(void*)&package.data,
+        &data_size,
+        (uint8_t*)(void*)&package.data,
+        sizeof(package.data),
+        (uint8_t*)(void*)&package.header,
+        sizeof(package.header),
+        nullptr,
+        package.header.nonce,
+        peer_details->chain_key
+    ) != 0) {
+        WARN_LOG("Forged message found");
+        return;
+    }
+
+    /* Send the package */
+    main_socket.Send((char*)(void*)&package,
+                     sizeof(package),
+                     peer_details->endpoint);
 }

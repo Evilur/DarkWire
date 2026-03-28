@@ -217,7 +217,7 @@ FORCE_INLINE void Client::RunHandlePackagesLoop() noexcept {
 FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
     /* Check last packages timestamps every 10 seconds */
     for (;;) {
-        /* Sleep for 8 seconds */
+        /* Sleep for 10 seconds */
         usleep(10 * 1'000'000);
 
         /* Get the current timestamp */
@@ -226,20 +226,40 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
         /* Send the keep alive package to the server */
         std::shared_lock details_lock(Peers::details_mutex);
 
-        /* Check the last package timestamp and send the keep-alive */
-        Peers::Details* server_details = nullptr;
+        /* Check the last package timestamp */
         {
-            std::lock_guard server_lock(Server::mutex);
-            server_details = Peers::details->Get(Server::local_ip);
-        }
-        if (server_details == nullptr) continue;
-        if (timestamp - server_details->last_package_timestamp >=
-            15 * 1'000'000'000ULL) {
-            INFO_LOG("Sending keep-alive package to the server");
-            KeepAlive keep_alive(Server::nonce, timestamp);
-            main_socket.Send((const char*)(const void*)&keep_alive,
-                             sizeof(keep_alive),
-                             Server::endpoint);
+            Peers::Details* server_details;
+            {
+                std::lock_guard server_lock(Server::mutex);
+                server_details = Peers::details->Get(Server::local_ip);
+            }
+            if (server_details == nullptr) continue;
+            if (timestamp - server_details->last_package_timestamp >=
+                15 * 1'000'000'000ULL) {
+                /* Assemble the package and decrypt it */
+                KeepAlive keep_alive(Server::nonce, timestamp);
+                unsigned long long data_size;
+                crypto_aead_chacha20poly1305_ietf_encrypt(
+                    (uint8_t*)(void*)&keep_alive.data,
+                    &data_size,
+                    (uint8_t*)(void*)&keep_alive.data,
+                    sizeof(keep_alive.data),
+                    (uint8_t*)(void*)&keep_alive.header,
+                    sizeof(keep_alive.header),
+                    nullptr,
+                    keep_alive.header.nonce,
+                    server_details->key
+                );
+
+                /* Send the keep-alive */
+                INFO_LOG("Sending a keep-alive package to the server");
+                main_socket.Send((const char*)(const void*)&keep_alive,
+                                 sizeof(keep_alive),
+                                 Server::endpoint);
+
+                /* Update the last package timestamp */
+                server_details->last_package_timestamp = timestamp;
+            }
         }
 
         /* Send keep-alive packages to all the active peers */
@@ -250,15 +270,31 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
             /* If the endpoint is no the server, check the last package time */
             if (timestamp - peer_details.last_package_timestamp <
                 15 * 1'000'000'000ULL) continue;
+            /* Assebmle the package and decrypt it */
+            KeepAlive keep_alive(peer_details.nonce, timestamp);
+            unsigned long long data_size;
+            crypto_aead_chacha20poly1305_ietf_encrypt(
+                (uint8_t*)(void*)&keep_alive.data,
+                &data_size,
+                (uint8_t*)(void*)&keep_alive.data,
+                sizeof(keep_alive.data),
+                (uint8_t*)(void*)&keep_alive.header,
+                sizeof(keep_alive.header),
+                nullptr,
+                keep_alive.header.nonce,
+                peer_details.key
+            );
 
             /* If all is OK, send the keep alive */
-            TRACE_LOG("Sending keep-alive package to the %s:%hu",
+            TRACE_LOG("Sending a keep-alive package to the %s:%hu",
                       inet_ntoa(peer_details.endpoint.sin_addr),
                       ntohs(peer_details.endpoint.sin_port));
-            KeepAlive keep_alive(peer_details.nonce, timestamp);
             main_socket.Send((const char*)(const void*)&keep_alive,
                              sizeof(keep_alive),
                              peer_details.endpoint);
+
+            /* Update the last package timestamp */
+            peer_details.last_package_timestamp = timestamp;
         }
     }
 }

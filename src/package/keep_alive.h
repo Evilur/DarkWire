@@ -12,8 +12,11 @@ struct KeepAlive final {
         PackageType type;
         uint8_t nonce[crypto_aead_chacha20poly1305_NPUBBYTES];
         uint32_t source_ip;
-        uint64_t timestamp;
     } __attribute__((packed)) header;
+    struct {
+        uint64_t timestamp;
+    } __attribute__((packed)) data;
+    uint8_t poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
     explicit KeepAlive(Nonce* nonce, uint64_t timestamp) noexcept;
 } __attribute__((packed));
@@ -30,5 +33,5 @@ FORCE_INLINE KeepAlive::KeepAlive(Nonce* const nonce,
     header.source_ip = local_ip.Netb();
 
     /* Set the timestamp */
-    header.timestamp = timestamp;
+    data.timestamp = timestamp;
 }
