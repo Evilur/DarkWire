@@ -260,9 +260,6 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
                              sizeof(keep_alive),
                              peer_details.endpoint);
         }
-
-        /* Unlock the lock */
-        details_lock.unlock();
     }
 }
 
