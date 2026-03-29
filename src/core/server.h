@@ -181,18 +181,20 @@ FORCE_INLINE void Server::RunHandlePackagesLoop() noexcept {
         {                                                                     \
             T* const package = (T*)(void*)buffer;                             \
             Handle##T(package, (uint32_t)buffer_size, from);                  \
+            continue;                                                         \
         }
 
         /* Handle the package by its type */
         if (type == TRANSFER_DATA)
             HANDLE_PACKAGE(TransferData)
-        else if (type == KEEPALIVE &&
-                 buffer_size == sizeof(KeepAlive))
+        if (type == KEEPALIVE &&
+            buffer_size == sizeof(KeepAlive))
             HANDLE_PACKAGE(KeepAlive)
-        else if (type == HANDSHAKE_REQUEST &&
-                 buffer_size == sizeof(HandshakeRequest))
-                HANDLE_PACKAGE(HandshakeRequest)
-        else if (type == GET_PEER_REQUEST)
+        if (type == HANDSHAKE_REQUEST &&
+            buffer_size == sizeof(HandshakeRequest))
+            HANDLE_PACKAGE(HandshakeRequest)
+        if (type == GET_PEER_REQUEST &&
+            buffer_size == sizeof(GetPeerRequest))
             HANDLE_PACKAGE(GetPeerRequest)
     }
 }
@@ -590,11 +592,11 @@ FORCE_INLINE void Server::HandleGetPeerRequest(
     const uint64_t package_timestamp = package->header.timestamp;
 
     /* Decrypt the package */
-    unsigned long long data_size;
+    unsigned long long dummy_len;
     if (package_timestamp <= source_peer_details->last_timestamp ||
         crypto_aead_chacha20poly1305_ietf_decrypt(
         (uint8_t*)(void*)&package->data,
-        &data_size,
+        &dummy_len,
         nullptr,
         (uint8_t*)(void*)&package->data,
         sizeof(package->data) + sizeof(package->poly1305_tag),
@@ -621,20 +623,72 @@ FORCE_INLINE void Server::HandleGetPeerRequest(
     Peers::Details* const requested_peer_details =
         Peers::details->Get(peer_ip);
 
-    /* Assemble the response */
-    GetPeerResponse response(source_peer_details->nonce, peer_ip);
+    /* Send the requested peer to the source */
+    {
+        /* Assemble the response */
+        GetPeerResponse response(source_peer_details->nonce, peer_ip);
 
-    /* If there is no such a peer */
-    if (requested_peer_details == nullptr)
-        response.SetData({ .sin_port = 0, .sin_addr = INADDR_ANY }, nullptr);
-    /* If we have a peer with such an ip */
-    else
-        response.SetData(requested_peer_details->endpoint,
-                         requested_peer_details->static_public_key);
+        /* If there is no such a peer */
+        if (requested_peer_details == nullptr)
+            response.SetData({ .sin_port = 0, .sin_addr = INADDR_ANY },
+                             nullptr);
+        /* If we have a peer with such an ip */
+        else
+            response.SetData(requested_peer_details->endpoint,
+                             requested_peer_details->static_public_key);
 
-    /* Send the response to the client */
-    INFO_LOG("Sending the get peer response to the %s:%hu",
-             inet_ntoa(from.sin_addr),
-             ntohs(from.sin_port));
-    main_socket.Send((char*)(void*)&response, sizeof(response), from);
+        /* Encrypt the response */
+        crypto_aead_chacha20poly1305_ietf_encrypt(
+            (uint8_t*)(void*)&response.data,
+            &dummy_len,
+            (uint8_t*)(void*)&response.data,
+            sizeof(response.data),
+            (uint8_t*)(void*)&response.header,
+            sizeof(response.header),
+            nullptr,
+            response.header.nonce,
+            source_peer_details->chain_key
+        );
+
+        /* Send the response to the client */
+        INFO_LOG("Sending the get peer response to the %s:%hu",
+                 inet_ntoa(from.sin_addr),
+                 ntohs(from.sin_port));
+        main_socket.Send((char*)(void*)&response, sizeof(response), from);
+    }
+
+    /* Send the source peer to the requested */
+    {
+        /* Check the requested peer */
+        if (requested_peer_details == nullptr) return;
+
+        /* Assemble the response */
+        GetPeerResponse response(requested_peer_details->nonce,
+                                 package->header.source_ip);
+
+        response.SetData(source_peer_details->endpoint,
+                         source_peer_details->static_public_key);
+
+        /* Encrypt the response */
+        crypto_aead_chacha20poly1305_ietf_encrypt(
+            (uint8_t*)(void*)&response.data,
+            &dummy_len,
+            (uint8_t*)(void*)&response.data,
+            sizeof(response.data),
+            (uint8_t*)(void*)&response.header,
+            sizeof(response.header),
+            nullptr,
+            response.header.nonce,
+            requested_peer_details->chain_key
+        );
+
+        /* Send the response to the client */
+        const sockaddr_in& requested_peer = requested_peer_details->endpoint;
+        INFO_LOG("Sending the get peer response to the %s:%hu",
+                 inet_ntoa(requested_peer.sin_addr),
+                 ntohs(requested_peer.sin_port));
+        main_socket.Send((char*)(void*)&response,
+                         sizeof(response),
+                         requested_peer);
+    }
 }
