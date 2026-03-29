@@ -53,13 +53,13 @@ private:
         } __attribute__((aligned(128)));
 
         static inline uint32_t number = 0;
-        static inline LinkedList<const uint8_t*>* public_keys =
-            nullptr;
-        static inline Dictionary<uint32_t, Details, uint32_t>* details =
-            nullptr;
+        static inline LinkedList<const uint8_t*>*
+            public_keys = nullptr;
+        static inline Dictionary<uint32_t, Details, uint32_t>*
+            details = nullptr;
         static inline std::shared_mutex details_mutex;
-        static inline Dictionary<KeyBuffer, uint64_t, uint32_t>* timestamps =
-            nullptr;
+        static inline Dictionary<KeyBuffer, uint64_t, uint32_t>*
+            timestamps = nullptr;
         static inline std::mutex timestamps_mutex;
     };
 
