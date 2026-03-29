@@ -5,6 +5,7 @@
 #include "core/keys.h"
 #include "core/tun.h"
 #include "package/get_peer_request.h"
+#include "package/get_peer_response.h"
 #include "package/handshake_request.h"
 #include "package/handshake_response.h"
 #include "package/keep_alive.h"
@@ -57,8 +58,6 @@ private:
     };
 
     struct Peers final {
-        enum NatThroughType : uint8_t { UNDEFINED, PROBING, DIRECT, RELAY };
-
         struct Details final {
             sockaddr_in endpoint;
             uint64_t last_to_package_timestamp;
@@ -68,12 +67,18 @@ private:
             UniqPtr<Nonce> nonce;
         } __attribute__((aligned(128)));
 
-        static inline Dictionary<uint32_t, Details, uint8_t>* details =
-            nullptr;
+        struct TempDetails final {
+            enum : uint8_t { UNDEFINED, PROBING, DIRECT, RELAY } access_type;
+            sockaddr_in endpoint;
+            uint8_t public_static_key[crypto_scalarmult_BYTES];
+        } __attribute__((aligned(64)));
+
+        static inline Dictionary<uint32_t, Details, uint8_t>*
+            details = nullptr;
         static inline std::shared_mutex details_mutex;
-        static inline Dictionary<uint32_t, NatThroughType, uint8_t>*
-            nat_throughs = nullptr;
-        static inline std::shared_mutex nat_though_mutex;
+        static inline Dictionary<uint32_t, TempDetails, uint8_t>*
+            temp_details = nullptr;
+        static inline std::shared_mutex temp_details_mutex;
     };
 
     static inline uint64_t _next_handshake_timestamp =
@@ -82,14 +87,20 @@ private:
     static void HandleHandshakeResponse(
         HandshakeResponse* package,
         uint32_t package_size,
-        sockaddr_in from
+        const sockaddr_in& from
     ) noexcept;
 
     static void HandleTransferData(
         TransferData* package,
         uint32_t package_size,
-        sockaddr_in from
+        const sockaddr_in& from
     ) noexcept;
+
+    static void HandleGetPeerResponse(
+        GetPeerResponse* package,
+        uint32_t package_size,
+        const sockaddr_in& from
+    );
 
     static void GetPeerFromServer(uint32_t peer_ip) noexcept;
 };
@@ -120,8 +131,8 @@ FORCE_INLINE void Client::Init() {
     /* Allocate memory for peers */
     Peers::details =
         new Dictionary<uint32_t, Peers::Details, uint8_t>(16);
-    Peers::nat_throughs =
-        new Dictionary<uint32_t, Peers::NatThroughType, uint8_t>(16);
+    Peers::temp_details =
+        new Dictionary<uint32_t, Peers::TempDetails, uint8_t>(16);
 }
 
 FORCE_INLINE void Client::RunHandshakeLoop() {
@@ -137,7 +148,7 @@ FORCE_INLINE void Client::RunHandshakeLoop() {
 
         /* Lock the server */
         std::lock_guard server_lock(Server::mutex);
-        INFO_LOG("Sending a handshake request to the server");
+        INFO_LOG("Sending the handshake request to the server");
 
         /* Generate the ephemeral keys pair */
         Server::ephemeral_keys = new Keys();
@@ -213,12 +224,16 @@ FORCE_INLINE void Client::RunHandlePackagesLoop() noexcept {
         }
 
         /* Handle the package by its type */
-        if (type == HANDSHAKE_RESPONSE)
-            if (buffer_size == sizeof(HandshakeResponse)
-                && equal(from, Server::endpoint))
-                    HANDLE_PACKAGE(HandshakeResponse);
         if (type == TRANSFER_DATA)
             HANDLE_PACKAGE(TransferData);
+        if (type == HANDSHAKE_RESPONSE &&
+            buffer_size == sizeof(HandshakeResponse) &&
+            equal(from, Server::endpoint))
+            HANDLE_PACKAGE(HandshakeResponse);
+        if (type == GET_PEER_RESPONSE &&
+            buffer_size == sizeof(GetPeerResponse) &&
+            equal(from, Server::endpoint))
+            HANDLE_PACKAGE(GetPeerResponse);
     }
 }
 
@@ -244,7 +259,7 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
             if (server_details == nullptr) continue;
             if (timestamp - server_details->last_to_package_timestamp >=
                 10 * 1'000'000'000ULL) {
-                /* Assemble the package and decrypt it */
+                /* Assemble the package and encrypt it */
                 KeepAlive keep_alive(Server::nonce, timestamp);
                 unsigned long long data_size;
                 crypto_aead_chacha20poly1305_ietf_encrypt(
@@ -260,7 +275,7 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
                 );
 
                 /* Send the keep-alive */
-                INFO_LOG("Sending a keep-alive package to the server");
+                INFO_LOG("Sending the keep-alive package to the server");
                 main_socket.Send((const char*)(const void*)&keep_alive,
                                  sizeof(keep_alive),
                                  Server::endpoint);
@@ -278,7 +293,7 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
             /* If the endpoint is no the server, check the last package time */
             if (timestamp - peer_details.last_to_package_timestamp <
                 10 * 1'000'000'000ULL) continue;
-            /* Assebmle the package and decrypt it */
+            /* Assebmle the package and encrypt it */
             KeepAlive keep_alive(peer_details.nonce, timestamp);
             unsigned long long data_size;
             crypto_aead_chacha20poly1305_ietf_encrypt(
@@ -294,7 +309,7 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
             );
 
             /* If all is OK, send the keep alive */
-            TRACE_LOG("Sending a keep-alive package to the %s:%hu",
+            TRACE_LOG("Sending the keep-alive package to the %s:%hu",
                       inet_ntoa(peer_details.endpoint.sin_addr),
                       ntohs(peer_details.endpoint.sin_port));
             main_socket.Send((const char*)(const void*)&keep_alive,
@@ -323,24 +338,26 @@ noexcept {
         /* Try to get the peer from the server
          * (If we didn't do that yet) */
         {
-            std::shared_lock nat_through_lock(Peers::nat_though_mutex);
+            std::shared_lock temp_details_lock(Peers::temp_details_mutex);
             if ((destination_ip & binmask.Netb()) == network_prefix.Netb() &&
-                !Peers::nat_throughs->Has(destination_ip)) {
-                nat_through_lock.unlock();
-                std::unique_lock nat_trough_uniq_lock(Peers::nat_though_mutex);
-                Peers::nat_throughs->Put(destination_ip, Peers::UNDEFINED);
+                !Peers::temp_details->Has(destination_ip)) {
+                temp_details_lock.unlock();
+                std::unique_lock nat_trough_uniq_lock(Peers::temp_details_mutex);
+                Peers::temp_details->Put(destination_ip, {
+                                            .access_type =
+                                                Peers::TempDetails::PROBING,
+                                         });
                 std::thread(GetPeerFromServer, destination_ip).detach();
             }
         }
 
         /* Get the server peer */
-        {
-            std::lock_guard server_lock(Server::mutex);
-            peer_details = Peers::details->Get(Server::local_ip);
-            if (peer_details == nullptr) return;
-            /* Set the destination ip */
-            destination_ip = Server::local_ip;
-        }
+        std::lock_guard server_lock(Server::mutex);
+        peer_details = Peers::details->Get(Server::local_ip);
+        if (peer_details == nullptr) return;
+
+        /* Set the destination ip */
+        destination_ip = Server::local_ip;
     }
 
     /* Update the package header */
@@ -375,7 +392,7 @@ noexcept {
 FORCE_INLINE void Client::HandleHandshakeResponse(
     HandshakeResponse* const package,
     const uint32_t package_size,
-    const sockaddr_in from
+    const sockaddr_in& from
 ) noexcept {
     /* If this package is not from the server */
     std::lock_guard server_lock(Server::mutex);
@@ -471,8 +488,8 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
 
 FORCE_INLINE void Client::HandleTransferData(
     TransferData* const package,
-    uint32_t package_size,
-    sockaddr_in from
+    const uint32_t package_size,
+    const sockaddr_in& from
 ) noexcept {
     TRACE_LOG("Receive a transfer data from the %s:%hu",
               inet_ntoa(from.sin_addr),
@@ -507,10 +524,10 @@ FORCE_INLINE void Client::HandleTransferData(
 
 FORCE_INLINE void Client::GetPeerFromServer(const uint32_t peer_ip)
 noexcept {
-    std::shared_lock nat_through_lock(Peers::nat_though_mutex);
-    Peers::NatThroughType* nat_though_type = nullptr;
+    std::shared_lock temp_details_lock(Peers::temp_details_mutex);
+    Peers::TempDetails* temp_details = nullptr;
     do {
-        nat_through_lock.unlock();
+        temp_details_lock.unlock();
 
         /* Assemble the response package */
         GetPeerRequest package(Server::nonce, peer_ip);
@@ -532,7 +549,8 @@ noexcept {
             );
 
             /* Send the package to the server */
-            INFO_LOG("Sending get '%s' peer package", inet_ntoa({ peer_ip }));
+            INFO_LOG("Sending the get '%s' peer package",
+                     inet_ntoa({ peer_ip }));
             main_socket.Send((char*)(void*)&package,
                              sizeof(package),
                              Server::endpoint);
@@ -541,10 +559,60 @@ noexcept {
         /* Wait for 6 seconds */
         usleep(6 * 1'000'000);
 
-        /* Get the nat through type */
-        nat_through_lock.lock();
-        nat_though_type = Peers::nat_throughs->Get(peer_ip);
+        /* Get the temp details */
+        temp_details_lock.lock();
+        temp_details = Peers::temp_details->Get(peer_ip);
     /* While we have not got the response */
-    } while (nat_though_type != nullptr &&
-             *nat_though_type == Peers::UNDEFINED);
+    } while (temp_details != nullptr &&
+             temp_details->access_type == Peers::TempDetails::UNDEFINED);
+}
+
+void Client::HandleGetPeerResponse(
+    GetPeerResponse* const package,
+    const uint32_t package_size,
+    const sockaddr_in& from) {
+    INFO_LOG("Receive a get peer response");
+
+    /* Decrypt the package */
+    {
+        std::lock_guard server_lock(Server::mutex);
+        unsigned long long dummy_len;
+        if (crypto_aead_chacha20poly1305_ietf_decrypt(
+            (uint8_t*)(void*)&package->data,
+            &dummy_len,
+            nullptr,
+            (uint8_t*)(void*)&package->data,
+            sizeof(package->data) + sizeof(package->poly1305_tag),
+            (uint8_t*)(void*)&package->header,
+            sizeof(package->header),
+            package->header.nonce,
+            Server::chain_key
+        ) != 0) {
+            WARN_LOG("Forged message found");
+            return;
+        };
+    }
+
+    /* If the peer isn't exist */
+    if (package->data.real_ip == INADDR_ANY) {
+        std::unique_lock temp_details_lock(Peers::temp_details_mutex);
+        Peers::temp_details->Delete(package->data.local_ip);
+        return;
+    }
+
+    /* Update the temp details type */
+    std::unique_lock temp_details_lock(Peers::temp_details_mutex);
+    Peers::TempDetails* temp_details =
+        Peers::temp_details->Get(package->data.local_ip);
+    if (temp_details != nullptr) {
+        temp_details->access_type = Peers::TempDetails::PROBING;
+        temp_details->endpoint = {
+            .sin_family = AF_INET,
+            .sin_port = package->data.real_port,
+            .sin_addr = { package->data.real_ip }
+        };
+        memcpy(temp_details->public_static_key,
+               package->data.public_key,
+               crypto_scalarmult_BYTES);
+    }
 }
