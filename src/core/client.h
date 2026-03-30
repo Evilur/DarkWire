@@ -62,15 +62,17 @@ private:
             sockaddr_in endpoint;
             uint64_t last_to_package_timestamp;
             uint64_t last_from_package_timestamp;
+            uint64_t last_handshake_timestamp;
             uint8_t chain_key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
             uint8_t public_static_key[crypto_scalarmult_BYTES];
             UniqPtr<Nonce> nonce;
         } __attribute__((aligned(128)));
 
         struct TempDetails final {
-            enum : uint8_t { UNDEFINED, PROBING, DIRECT, RELAY } access_type;
             sockaddr_in endpoint;
             uint8_t public_static_key[crypto_scalarmult_BYTES];
+            bool waiting_get_peer;
+            bool waiting_handshake_response;
         } __attribute__((aligned(64)));
 
         static inline Dictionary<uint32_t, Details, uint8_t>*
@@ -100,9 +102,15 @@ private:
         GetPeerResponse* package,
         uint32_t package_size,
         const sockaddr_in& from
-    );
+    ) noexcept;
 
     static void GetPeerFromServer(uint32_t peer_ip) noexcept;
+
+    static void SendP2PHandshakeRequest(
+        uint32_t peer_ip,
+        Peers::TempDetails* peer_temp_details,
+        bool probing_channel
+    ) noexcept;
 };
 
 FORCE_INLINE void Client::Init() {
@@ -244,7 +252,7 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
         usleep(5 * 1'000'000);
 
         /* Get the current timestamp */
-        uint64_t timestamp = Time::Nanoseconds();
+        const uint64_t timestamp = Time::Nanoseconds();
 
         /* Send the keep alive package to the server */
         std::shared_lock details_lock(Peers::details_mutex);
@@ -288,11 +296,12 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
         /* Send keep-alive packages to all the active peers */
         for (auto& [ _, peer_details ] : *Peers::details) {
             /* Check for server as relay */
-            if (::equal(peer_details.endpoint, Server::endpoint)) continue;
+            if (equal(peer_details.endpoint, Server::endpoint)) continue;
 
             /* If the endpoint is no the server, check the last package time */
             if (timestamp - peer_details.last_to_package_timestamp <
                 10 * 1'000'000'000ULL) continue;
+
             /* Assebmle the package and encrypt it */
             KeepAlive keep_alive(peer_details.nonce, timestamp);
             unsigned long long data_size;
@@ -341,12 +350,6 @@ noexcept {
             std::shared_lock temp_details_lock(Peers::temp_details_mutex);
             if ((destination_ip & binmask.Netb()) == network_prefix.Netb() &&
                 !Peers::temp_details->Has(destination_ip)) {
-                temp_details_lock.unlock();
-                std::unique_lock nat_trough_uniq_lock(Peers::temp_details_mutex);
-                Peers::temp_details->Put(destination_ip, {
-                                            .access_type =
-                                                Peers::TempDetails::PROBING,
-                                         });
                 std::thread(GetPeerFromServer, destination_ip).detach();
             }
         }
@@ -396,7 +399,6 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
 ) noexcept {
     /* If this package is not from the server */
     std::lock_guard server_lock(Server::mutex);
-    if (!equal(from, Server::endpoint)) return;
 
     /* Compute the second shared secret and update the chain key */
     uint8_t shared[crypto_scalarmult_BYTES];
@@ -457,7 +459,7 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
             memcpy(details.chain_key, Server::chain_key,
                    crypto_aead_chacha20poly1305_ietf_KEYBYTES);
 
-            /* Put the new data to the lists dictionary */
+            /* Put the new data to the dictionary */
             Peers::details->Put(package->data.server_local_ip,
                                 std::move(details));
         /* Otherwise, update the existing details */
@@ -522,10 +524,104 @@ FORCE_INLINE void Client::HandleTransferData(
     tun->Write(package->data, (uint32_t)data_size);
 }
 
+FORCE_INLINE void Client::HandleGetPeerResponse(
+    GetPeerResponse* const package,
+    const uint32_t package_size,
+    const sockaddr_in& from
+) noexcept {
+    INFO_LOG("Receive a get peer response");
+
+    /* Decrypt the package */
+    {
+        std::lock_guard server_lock(Server::mutex);
+        unsigned long long dummy_len;
+        if (crypto_aead_chacha20poly1305_ietf_decrypt(
+            (uint8_t*)(void*)&package->data,
+            &dummy_len,
+            nullptr,
+            (uint8_t*)(void*)&package->data,
+            sizeof(package->data) + sizeof(package->poly1305_tag),
+            (uint8_t*)(void*)&package->header,
+            sizeof(package->header),
+            package->header.nonce,
+            Server::chain_key
+        ) != 0) {
+            WARN_LOG("Forged message found");
+            return;
+        };
+    }
+
+    /* Save the peer ip */
+    const uint32_t peer_ip = package->data.local_ip;
+
+    /* We aren't waiting for that peer anymore */
+    {
+        std::unique_lock temp_details_lock(Peers::temp_details_mutex);
+        Peers::TempDetails* const peer_temp_details =
+            Peers::temp_details->Get(peer_ip);
+        if (peer_temp_details != nullptr)
+            peer_temp_details->waiting_get_peer = false;
+    }
+
+    /* If the peer isn't exist */
+    if (package->data.real_ip == INADDR_ANY) return;
+
+    /* Assemble the new endpoint */
+    const sockaddr_in new_endpoint = {
+        .sin_family = AF_INET,
+        .sin_port = package->data.real_port,
+        .sin_addr = { package->data.real_ip }
+    };
+
+    /* Try to get the peer from the dictionary */
+    std::unique_lock temp_details_lock(Peers::temp_details_mutex);
+    Peers::TempDetails* peer_temp_details =
+        Peers::temp_details->Get(peer_ip);
+
+    /* If there is no such a peer in the dictionary yet */
+    if (peer_temp_details == nullptr) {
+        /* Put the new details to the dictionary */
+        Peers::TempDetails new_details = {
+            .endpoint = new_endpoint,
+            .waiting_get_peer = false,
+            .waiting_handshake_response = false
+        };
+        memcpy(new_details.public_static_key,
+               package->data.public_key,
+               crypto_scalarmult_BYTES);
+        Peers::temp_details->Put(peer_ip, new_details);
+        peer_temp_details = Peers::temp_details->Get(peer_ip);
+    } else {
+        /* Update fields */
+        peer_temp_details->endpoint = new_endpoint;
+        peer_temp_details->waiting_get_peer = false;
+        memcpy(peer_temp_details->public_static_key,
+               package->data.public_key,
+               crypto_scalarmult_BYTES);
+    }
+
+    /* The client with the biggest static key
+     * must initialize the handshake */
+    if (KeyBuffer(static_keys->Public()) <
+        KeyBuffer(peer_temp_details->public_static_key)) return;
+
+    /* If all is OK, send the handshake to the peer */
+    std::thread(SendP2PHandshakeRequest,
+                peer_ip,
+                peer_temp_details,
+                true).detach();
+}
+
 FORCE_INLINE void Client::GetPeerFromServer(const uint32_t peer_ip)
 noexcept {
+    /* Now we are waiting for the peer */
+    {
+        std::unique_lock temp_details_lock(Peers::temp_details_mutex);
+        Peers::temp_details->Put(peer_ip, { .waiting_get_peer = true });
+    }
+
     std::shared_lock temp_details_lock(Peers::temp_details_mutex);
-    Peers::TempDetails* temp_details = nullptr;
+    Peers::TempDetails* peer_temp_details = nullptr;
     do {
         temp_details_lock.unlock();
 
@@ -561,58 +657,37 @@ noexcept {
 
         /* Get the temp details */
         temp_details_lock.lock();
-        temp_details = Peers::temp_details->Get(peer_ip);
+        peer_temp_details = Peers::temp_details->Get(peer_ip);
     /* While we have not got the response */
-    } while (temp_details != nullptr &&
-             temp_details->access_type == Peers::TempDetails::UNDEFINED);
+    } while (peer_temp_details != nullptr &&
+             peer_temp_details->waiting_get_peer);
 }
 
-void Client::HandleGetPeerResponse(
-    GetPeerResponse* const package,
-    const uint32_t package_size,
-    const sockaddr_in& from) {
-    INFO_LOG("Receive a get peer response");
-
-    /* Decrypt the package */
+FORCE_INLINE
+void Client::SendP2PHandshakeRequest(
+    const uint32_t peer_ip,
+    Peers::TempDetails* const peer_temp_details,
+    const bool probing_channel
+) noexcept {
+    /* If we already are waiting for the response */
     {
-        std::lock_guard server_lock(Server::mutex);
-        unsigned long long dummy_len;
-        if (crypto_aead_chacha20poly1305_ietf_decrypt(
-            (uint8_t*)(void*)&package->data,
-            &dummy_len,
-            nullptr,
-            (uint8_t*)(void*)&package->data,
-            sizeof(package->data) + sizeof(package->poly1305_tag),
-            (uint8_t*)(void*)&package->header,
-            sizeof(package->header),
-            package->header.nonce,
-            Server::chain_key
-        ) != 0) {
-            WARN_LOG("Forged message found");
-            return;
-        };
+        std::shared_lock temp_details_lock(Peers::temp_details_mutex);
+        if (peer_temp_details->waiting_handshake_response) return;
+        peer_temp_details->waiting_handshake_response = true;
     }
 
-    /* If the peer isn't exist */
-    if (package->data.real_ip == INADDR_ANY) {
-        std::unique_lock temp_details_lock(Peers::temp_details_mutex);
-        Peers::temp_details->Delete(package->data.local_ip);
-        return;
-    }
-
-    /* Update the temp details type */
+    /* Lock the temp details */
     std::unique_lock temp_details_lock(Peers::temp_details_mutex);
-    Peers::TempDetails* temp_details =
-        Peers::temp_details->Get(package->data.local_ip);
-    if (temp_details != nullptr) {
-        temp_details->access_type = Peers::TempDetails::PROBING;
-        temp_details->endpoint = {
-            .sin_family = AF_INET,
-            .sin_port = package->data.real_port,
-            .sin_addr = { package->data.real_ip }
-        };
-        memcpy(temp_details->public_static_key,
-               package->data.public_key,
-               crypto_scalarmult_BYTES);
+
+    /* Maximum: 8 attemps
+     * Every: 6 seconds */
+    for (uint8_t i = 0; i < 8 && Peers::temp_details->Has(peer_ip); i++) {
+        /* Get the current timestamp */
+        const uint64_t timestamp = Time::Nanoseconds();
+
+        /* Wait for 6 seconds */
+        temp_details_lock.unlock();
+        usleep(6 * 1'000'000);
+        temp_details_lock.lock();
     }
 }

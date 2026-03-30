@@ -298,8 +298,8 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
         /* Try to delete the peer with such a static key (if exists) */
         std::unique_lock details_lock(Peers::details_mutex);
         for (const auto& [ip, details] : *Peers::details)
-            if (equal((KeyBuffer)details.static_public_key,
-                      (KeyBuffer)package->data.static_public_key)) {
+            if (equal(KeyBuffer(details.static_public_key),
+                      KeyBuffer(package->data.static_public_key))) {
             Peers::details->Delete(ip);
             break;
         }

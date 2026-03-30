@@ -22,6 +22,14 @@ public:
 
     bool operator!=(const KeyBuffer& other) const noexcept;
 
+    bool operator>(const KeyBuffer& other) const noexcept;
+
+    bool operator<(const KeyBuffer& other) const noexcept;
+
+    bool operator>=(const KeyBuffer& other) const noexcept;
+
+    bool operator<=(const KeyBuffer& other) const noexcept;
+
     [[nodiscard]] const uint8_t* Get() const noexcept;
 
 private:
@@ -39,6 +47,26 @@ const noexcept {
 FORCE_INLINE bool KeyBuffer::operator!=(const KeyBuffer& other)
 const noexcept {
     return memcmp(_ptr, other._ptr, crypto_scalarmult_BYTES) != 0;
+}
+
+FORCE_INLINE bool KeyBuffer::operator>(const KeyBuffer& other)
+const noexcept {
+    return memcmp(_ptr, other._ptr, crypto_scalarmult_BYTES) > 0;
+}
+
+FORCE_INLINE bool KeyBuffer::operator<(const KeyBuffer& other)
+const noexcept {
+    return memcmp(_ptr, other._ptr, crypto_scalarmult_BYTES) < 0;
+}
+
+FORCE_INLINE bool KeyBuffer::operator>=(const KeyBuffer& other)
+const noexcept {
+    return memcmp(_ptr, other._ptr, crypto_scalarmult_BYTES) >= 0;
+}
+
+FORCE_INLINE bool KeyBuffer::operator<=(const KeyBuffer& other)
+const noexcept {
+    return memcmp(_ptr, other._ptr, crypto_scalarmult_BYTES) <= 0;
 }
 
 FORCE_INLINE const uint8_t* KeyBuffer::Get()
