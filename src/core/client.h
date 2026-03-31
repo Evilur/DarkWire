@@ -9,6 +9,8 @@
 #include "package/handshake_request.h"
 #include "package/handshake_response.h"
 #include "package/keep_alive.h"
+#include "package/p2p_handshake_request.h"
+#include "package/p2p_handshake_response.h"
 #include "package/transfer_data.h"
 #include "socket/udp_socket.h"
 #include "type/dictionary.h"
@@ -48,11 +50,11 @@ public:
 
 private:
     struct Server final {
-        static inline Nonce* nonce;
         static inline sockaddr_in endpoint;
         static inline uint32_t local_ip;
         static inline uint8_t* public_key = nullptr;
         static inline uint8_t* chain_key = nullptr;
+        static inline UniqPtr<Nonce> nonce = nullptr;
         static inline UniqPtr<Keys> ephemeral_keys = nullptr;
         static inline std::mutex mutex;
     };
@@ -63,7 +65,7 @@ private:
             uint64_t last_to_package_timestamp;
             uint64_t last_from_package_timestamp;
             uint64_t last_handshake_timestamp;
-            uint8_t chain_key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
+            uint8_t key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
             uint8_t public_static_key[crypto_scalarmult_BYTES];
             UniqPtr<Nonce> nonce;
         } __attribute__((aligned(128)));
@@ -71,9 +73,12 @@ private:
         struct TempDetails final {
             sockaddr_in endpoint;
             uint8_t public_static_key[crypto_scalarmult_BYTES];
+            uint8_t chain_key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
+            UniqPtr<Nonce> nonce = nullptr;
+            UniqPtr<Keys> ephemeral_keys = nullptr;
             bool waiting_get_peer;
             bool waiting_handshake_response;
-        } __attribute__((aligned(64)));
+        } __attribute__((aligned(128)));
 
         static inline Dictionary<uint32_t, Details, uint8_t>*
             details = nullptr;
@@ -110,7 +115,7 @@ private:
         uint32_t peer_ip,
         Peers::TempDetails* peer_temp_details,
         bool probing_channel
-    ) noexcept;
+    );
 };
 
 FORCE_INLINE void Client::Init() {
@@ -144,7 +149,7 @@ FORCE_INLINE void Client::Init() {
 }
 
 FORCE_INLINE void Client::RunHandshakeLoop() {
-    /* Send a handhake request */
+    /* Send a handshake request */
     for (;;) {
         /* Check the timestamp */
         const uint64_t current_time = std::time(nullptr);
@@ -268,7 +273,7 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
             if (timestamp - server_details->last_to_package_timestamp >=
                 10 * 1'000'000'000ULL) {
                 /* Assemble the package and encrypt it */
-                KeepAlive keep_alive(Server::nonce, timestamp);
+                KeepAlive keep_alive(server_details->nonce, timestamp);
                 unsigned long long data_size;
                 crypto_aead_chacha20poly1305_ietf_encrypt(
                     (uint8_t*)keep_alive.data,
@@ -279,7 +284,7 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
                     sizeof(keep_alive.header),
                     nullptr,
                     keep_alive.header.nonce,
-                    server_details->chain_key
+                    server_details->key
                 );
 
                 /* Send the keep-alive */
@@ -314,7 +319,7 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
                 sizeof(keep_alive.header),
                 nullptr,
                 keep_alive.header.nonce,
-                peer_details.chain_key
+                peer_details.key
             );
 
             /* If all is OK, send the keep alive */
@@ -380,7 +385,7 @@ noexcept {
         sizeof(package.header),
         nullptr,
         package.header.nonce,
-        peer_details->chain_key
+        peer_details->key
     );
 
     /* Send the encrypted message */
@@ -454,9 +459,9 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
             Peers::Details details = {
                 .endpoint = Server::endpoint,
                 .last_to_package_timestamp = Time::Nanoseconds(),
-                .nonce = Server::nonce
+                .nonce = Server::nonce.Get()
             };
-            memcpy(details.chain_key, Server::chain_key,
+            memcpy(details.key, Server::chain_key,
                    crypto_aead_chacha20poly1305_ietf_KEYBYTES);
 
             /* Put the new data to the dictionary */
@@ -464,10 +469,13 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
                                 std::move(details));
         /* Otherwise, update the existing details */
         } else {
-            server_details->nonce = Server::nonce;
-            memcpy(server_details->chain_key, Server::chain_key,
+            server_details->nonce = Server::nonce.Get();
+            memcpy(server_details->key, Server::chain_key,
                    crypto_aead_chacha20poly1305_ietf_KEYBYTES);
         }
+
+        /* Release the server nonce */
+        Server::nonce.Release();
     }
 
     /* If there is the first handshake */
@@ -514,7 +522,7 @@ FORCE_INLINE void Client::HandleTransferData(
         (uint8_t*)(void*)&package->header,
         sizeof(package->header),
         package->header.nonce,
-        peers_details->chain_key
+        peers_details->key
     ) != 0) {
         WARN_LOG("Forged message found");
         return;
@@ -583,13 +591,15 @@ FORCE_INLINE void Client::HandleGetPeerResponse(
         /* Put the new details to the dictionary */
         Peers::TempDetails new_details = {
             .endpoint = new_endpoint,
+            .nonce = nullptr,
+            .ephemeral_keys = nullptr,
             .waiting_get_peer = false,
             .waiting_handshake_response = false
         };
         memcpy(new_details.public_static_key,
                package->data.public_key,
                crypto_scalarmult_BYTES);
-        Peers::temp_details->Put(peer_ip, new_details);
+        Peers::temp_details->Put(peer_ip, std::move(new_details));
         peer_temp_details = Peers::temp_details->Get(peer_ip);
     } else {
         /* Update fields */
@@ -626,7 +636,12 @@ noexcept {
         temp_details_lock.unlock();
 
         /* Assemble the response package */
-        GetPeerRequest package(Server::nonce, peer_ip);
+        std::shared_lock details_lock(Peers::details_mutex);
+        Peers::Details* server_details =
+            Peers::details->Get(Server::local_ip);
+        if (server_details == nullptr) { usleep(6 * 1'000'000); continue; }
+        GetPeerRequest package(server_details->nonce, peer_ip);
+        details_lock.unlock();
 
         /* Encrypt the package */
         {
@@ -668,7 +683,7 @@ void Client::SendP2PHandshakeRequest(
     const uint32_t peer_ip,
     Peers::TempDetails* const peer_temp_details,
     const bool probing_channel
-) noexcept {
+) {
     /* If we already are waiting for the response */
     {
         std::shared_lock temp_details_lock(Peers::temp_details_mutex);
@@ -680,10 +695,72 @@ void Client::SendP2PHandshakeRequest(
     std::unique_lock temp_details_lock(Peers::temp_details_mutex);
 
     /* Maximum: 8 attemps
-     * Every: 6 seconds */
+     * Every: 6 seconds
+     * Check for response every iteration */
     for (uint8_t i = 0; i < 8 && Peers::temp_details->Has(peer_ip); i++) {
+        INFO_LOG("Sending a handshake request to the %s peer%s",
+                 inet_ntoa({ peer_ip }),
+                 probing_channel ? " via the server" : "");
+
         /* Get the current timestamp */
         const uint64_t timestamp = Time::Nanoseconds();
+
+        /* Generate ephemeral keys pair */
+        const Keys* const ephemeral_keys =
+            peer_temp_details->ephemeral_keys =
+            new Keys();
+
+        /* Generate the nonce */
+        Nonce* const nonce =
+            peer_temp_details->nonce =
+            new Nonce();
+
+        /* Get the pointer to the chain key */
+        uint8_t* const chain_key = peer_temp_details->chain_key;
+
+        /* Assemble the handshake request package */
+        P2PHandshakeRequest package(nonce,
+                                    ephemeral_keys->Public(),
+                                    timestamp,
+                                    peer_ip,
+                                    probing_channel);
+
+        /* Compute the first shared secret */
+        uint8_t shared[crypto_scalarmult_BYTES];
+        if (crypto_scalarmult(shared,
+                              ephemeral_keys->Secret(),
+                              peer_temp_details->public_static_key) == -1) {
+            ERROR_LOG("crypto_scalarmult: "
+                      "Failed to compute the shared secret");
+            continue;
+        }
+
+        /* Get the chained ChaCha20 key */
+        hkdf(chain_key, nullptr, shared);
+
+        /* Sign the package */
+        unsigned long long dummy_len;
+        crypto_aead_chacha20poly1305_ietf_encrypt(
+            package.poly1305_tag,
+            &dummy_len,
+            nullptr,
+            0,
+            (uint8_t*)(void*)&package.header,
+            sizeof(package.header),
+            nullptr,
+            package.header.nonce,
+            chain_key
+        );
+
+        /* Get the endpoint */
+        sockaddr_in endpoint;
+        if (probing_channel) {
+            std::lock_guard server_lock(Server::mutex);
+            endpoint = Server::endpoint;
+        } else endpoint = peer_temp_details->endpoint;
+
+        /* Send the signed handshake request package */
+        main_socket.Send((char*)(void*)&package, sizeof(package), endpoint);
 
         /* Wait for 6 seconds */
         temp_details_lock.unlock();

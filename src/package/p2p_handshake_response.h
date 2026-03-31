@@ -14,6 +14,7 @@ struct P2PHandshakeResponse final {
         uint64_t timestamp;
         uint32_t source_ip;
         uint32_t destination_ip;
+        bool nat_probe;
     } __attribute__((packed)) header;
     uint8_t poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 

@@ -29,12 +29,13 @@ struct P2PHandshakeRequest final {
 } __attribute__((packed));
 
 FORCE_INLINE
-P2PHandshakeRequest::P2PHandshakeRequest(Nonce* nonce,
-                                         const uint8_t* ephemeral_public_key,
-                                         const uint64_t timestamp,
-                                         const uint32_t destination_ip,
-                                         const bool nat_probe)
-noexcept {
+P2PHandshakeRequest::P2PHandshakeRequest(
+    Nonce* const nonce,
+    const uint8_t* const ephemeral_public_key,
+    const uint64_t timestamp,
+    const uint32_t destination_ip,
+    const bool nat_probe
+) noexcept {
     /* Set the package type */
     header.type = P2P_HANDSHAKE_REQUEST;
 
