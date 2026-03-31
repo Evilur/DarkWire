@@ -289,7 +289,7 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
 
                 /* Send the keep-alive */
                 INFO_LOG("Sending the keep-alive package to the server");
-                main_socket.Send((const char*)(const void*)&keep_alive,
+                main_socket.Send((char*)(void*)&keep_alive,
                                  sizeof(keep_alive),
                                  Server::endpoint);
 
@@ -326,7 +326,7 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
             TRACE_LOG("Sending the keep-alive package to the %s:%hu",
                       inet_ntoa(peer_details.endpoint.sin_addr),
                       ntohs(peer_details.endpoint.sin_port));
-            main_socket.Send((const char*)(const void*)&keep_alive,
+            main_socket.Send((char*)(void*)&keep_alive,
                              sizeof(keep_alive),
                              peer_details.endpoint);
 
