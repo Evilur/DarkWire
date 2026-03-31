@@ -548,11 +548,11 @@ FORCE_INLINE void Server::HandleKeepAlive(
     unsigned long long data_size;
     if (package_timestamp <= peer_details->last_timestamp ||
         crypto_aead_chacha20poly1305_ietf_decrypt(
-        (uint8_t*)package->data,
+        package->poly1305_tag,
         &data_size,
         nullptr,
-        (uint8_t*)package->data,
-        sizeof(package->data) + sizeof(package->poly1305_tag),
+        package->poly1305_tag,
+        sizeof(package->poly1305_tag),
         (uint8_t*)(void*)&package->header,
         sizeof(package->header),
         package->header.nonce,

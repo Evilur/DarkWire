@@ -14,7 +14,6 @@ struct KeepAlive final {
         uint32_t source_ip;
         uint64_t timestamp;
     } __attribute__((packed)) header;
-    char data[1] = "";
     uint8_t poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
     explicit KeepAlive(Nonce* nonce, uint64_t timestamp) noexcept;
