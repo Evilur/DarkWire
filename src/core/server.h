@@ -8,6 +8,7 @@
 #include "package/handshake_request.h"
 #include "package/handshake_response.h"
 #include "package/keep_alive.h"
+#include "package/p2p_handshake_request.h"
 #include "package/package_type.h"
 #include "package/transfer_data.h"
 #include "socket/udp_socket.h"
@@ -83,6 +84,12 @@ private:
 
     static void HandleGetPeerRequest(
         GetPeerRequest* package,
+        uint32_t package_size,
+        const sockaddr_in& from
+    ) noexcept;
+
+    static void HandleP2PHandshakeRequest(
+        P2PHandshakeRequest* package,
         uint32_t package_size,
         const sockaddr_in& from
     ) noexcept;
@@ -196,6 +203,9 @@ FORCE_INLINE void Server::RunHandlePackagesLoop() noexcept {
         if (type == GET_PEER_REQUEST &&
             buffer_size == sizeof(GetPeerRequest))
             HANDLE_PACKAGE(GetPeerRequest)
+        if (type == P2P_HANDSHAKE_REQUEST &&
+            buffer_size == sizeof(P2PHandshakeRequest))
+            HANDLE_PACKAGE(P2PHandshakeRequest);
     }
 }
 
@@ -218,8 +228,8 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
         if (crypto_scalarmult(shared,
                               static_keys->Secret(),
                               package->header.ephemeral_public_key) == -1) {
-            ERROR_LOG("crypto_scalarmult: "
-                      "Failed to compute the shared secret");
+            WARN_LOG("crypto_scalarmult: "
+                     "Failed to compute the shared secret");
             return;
         }
 
@@ -359,7 +369,7 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     if (crypto_scalarmult(shared,
                           ephemeral_keys.Secret(),
                           package->header.ephemeral_public_key) == -1) {
-        ERROR_LOG("crypto_scalarmult: Failed to compute the shared secret");
+        WARN_LOG("crypto_scalarmult: Failed to compute the shared secret");
         return;
     }
     hkdf(chain_key, chain_key, shared);
@@ -368,7 +378,7 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     if (crypto_scalarmult(shared,
                           ephemeral_keys.Secret(),
                           package->data.static_public_key) == -1) {
-        ERROR_LOG("crypto_scalarmult: Failed to compute the shared secret");
+        WARN_LOG("crypto_scalarmult: Failed to compute the shared secret");
         return;
     }
     hkdf(chain_key, chain_key, shared);
@@ -691,4 +701,21 @@ FORCE_INLINE void Server::HandleGetPeerRequest(
                          sizeof(response),
                          requested_peer);
     }
+}
+
+void Server::HandleP2PHandshakeRequest(
+    P2PHandshakeRequest* const package,
+    const uint32_t package_size,
+    const sockaddr_in& from
+) noexcept {
+    /* Get the peer to transit for */
+    std::shared_lock details_lock(Peers::details_mutex);
+    const Peers::Details* const peer_details =
+        Peers::details->Get(package->header.destination_ip);
+    if (peer_details == nullptr) return;
+
+    /* Transit the package to the other peer */
+    main_socket.Send((char*)(void*)package,
+                     sizeof(P2PHandshakeRequest),
+                     peer_details->endpoint);
 }
