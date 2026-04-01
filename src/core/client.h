@@ -662,11 +662,8 @@ FORCE_INLINE void Client::HandleP2PHandshakeRequest(
     const uint64_t package_timestamp = package->header.timestamp;
 
     /* Check the package timestamps delta */
-    const uint64_t timestamp_delta =
-        timestamp > package_timestamp ?
-        timestamp - package_timestamp :
-        package_timestamp - timestamp;
-    if (timestamp_delta > 180 * 1'000'000'000ULL) {
+    if (Time::Delta(package_timestamp, timestamp) >
+        180 * 1'000'000'000ULL) {
         WARN_LOG("Invalid timestamp found");
         return;
     }
@@ -766,9 +763,7 @@ FORCE_INLINE void Client::HandleP2PHandshakeRequest(
     /* Compute the third shared secret and update the chain keys */
     if (crypto_scalarmult(shared,
                           ephemeral_keys.Secret(),
-                          peer_details != nullptr ?
-                          peer_details->public_static_key :
-                          peer_temp_details->public_static_key) == -1) {
+                          peer_details->public_static_key) == -1) {
         WARN_LOG("crypto_scalarmult: "
                  "Failed to compute the shared secret");
         return;
@@ -786,7 +781,7 @@ FORCE_INLINE void Client::HandleP2PHandshakeRequest(
                                   timestamp,
                                   peer_ip);
 
-    /* Encrypt the response package */
+    /* Sign the response package */
     {
         unsigned long long dummy_len;
         crypto_aead_chacha20poly1305_ietf_encrypt(
@@ -822,6 +817,122 @@ FORCE_INLINE void Client::HandleP2PHandshakeResponse(
              inet_ntoa({ package->header.source_ip }),
              equal(Server::endpoint, from) ?
              " via the server" : "");
+
+    /* Get the peer ip */
+    const uint32_t peer_ip = package->header.source_ip;
+
+    /* Try to get temp details */
+    std::unique_lock temp_details_lock(Peers::temp_details_mutex);
+    Peers::TempDetails* const peer_temp_details =
+        Peers::temp_details->Get(peer_ip);
+    if (peer_temp_details == nullptr) return;
+
+    /* Try to get permanent details */
+    std::unique_lock details_lock(Peers::details_mutex);
+    Peers::Details* const peer_details = Peers::details->Get(peer_ip);
+
+    /* Get the current timestamp and the package one */
+    const uint64_t timestamp = Time::Nanoseconds();
+    const uint64_t package_timestamp = package->header.timestamp;
+
+    /* Check the package timestamp */
+    if (Time::Delta(package_timestamp, timestamp) >
+        180 * 1'000'000'000ULL) {
+        WARN_LOG("Invalid timestamp found");
+        return;
+    }
+
+    /* Compare the last peer timestamp and the package timestamp */
+    if (peer_details != nullptr &&
+        package_timestamp <= peer_details->last_from_package_timestamp) {
+        WARN_LOG("Duplicate message found");
+        return;
+    }
+
+    /* If all is OK, get the chain key */
+    uint8_t chain_key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
+    memcpy(chain_key,
+           peer_temp_details->chain_key,
+           crypto_aead_chacha20poly1305_ietf_KEYBYTES);
+
+    /* Compute the second shared secret and update the chain keys */
+    uint8_t shared[crypto_scalarmult_BYTES];
+    if (crypto_scalarmult(shared,
+                          peer_temp_details->ephemeral_keys->Secret(),
+                          package->header.ephemeral_public_key) == -1) {
+        WARN_LOG("crypto_scalarmult: "
+                 "Failed to compute the shared secret");
+        return;
+    }
+    hkdf(chain_key, chain_key, shared);
+
+    /* Compute the third shared secret and update the chain keys */
+    if (crypto_scalarmult(shared,
+                          static_keys->Secret(),
+                          package->header.ephemeral_public_key) == -1) {
+        WARN_LOG("crypto_scalarmult: "
+                 "Failed to compute the shared secret");
+        return;
+    }
+    hkdf(chain_key, chain_key, shared);
+
+    /* Try to check the sign of the package */
+    {
+        unsigned long long dummy_len;
+        if (crypto_aead_chacha20poly1305_ietf_decrypt(
+            package->poly1305_tag,
+            &dummy_len,
+            nullptr,
+            package->poly1305_tag,
+            sizeof(package->poly1305_tag),
+            (uint8_t*)(void*)&package->header,
+            sizeof(package->header),
+            package->header.nonce,
+            chain_key
+        ) != 0) {
+            WARN_LOG("Forged message found");
+            return;
+        };
+    }
+
+    /* Save the peer to the permanent details dict */
+    if (peer_details == nullptr) {
+        Peers::Details new_details = {
+            .endpoint = peer_temp_details->endpoint,
+            .last_from_package_timestamp = package_timestamp,
+            .next_handshake_timestamp = timestamp + (180 * 1'000'000'000ULL),
+            .nonce = peer_temp_details->nonce.Get()
+        };
+        memcpy(new_details.key,
+               chain_key,
+               crypto_aead_chacha20poly1305_ietf_KEYBYTES);
+        memcpy(new_details.public_static_key,
+               peer_temp_details->public_static_key,
+               crypto_scalarmult_BYTES);
+        Peers::details->Put(peer_ip, std::move(new_details));
+    /* If it is already exists, just update the fields */
+    } else {
+        *peer_details = {
+            .endpoint = peer_temp_details->endpoint,
+            .last_from_package_timestamp = package_timestamp,
+            .next_handshake_timestamp = timestamp + (180 * 1'000'000'000ULL),
+            .nonce = peer_temp_details->nonce.Get()
+        };
+        memcpy(peer_details->key,
+               chain_key,
+               crypto_aead_chacha20poly1305_ietf_KEYBYTES);
+        memcpy(peer_details->public_static_key,
+               peer_temp_details->public_static_key,
+               crypto_scalarmult_BYTES);
+    }
+
+    /* Release the old nonce */
+    peer_temp_details->nonce.Release();
+
+    /* Remove the tempanent entry */
+    Peers::temp_details->Delete(peer_ip);
+    INFO_LOG("The handshake from the %s peer has been successfully handled",
+             inet_ntoa({ peer_ip }));
 }
 
 FORCE_INLINE void Client::GetPeerFromServer(const uint32_t peer_ip)
