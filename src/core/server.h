@@ -9,6 +9,7 @@
 #include "package/handshake_response.h"
 #include "package/keep_alive.h"
 #include "package/p2p_handshake_request.h"
+#include "package/p2p_handshake_response.h"
 #include "package/package_type.h"
 #include "package/transfer_data.h"
 #include "socket/udp_socket.h"
@@ -90,6 +91,12 @@ private:
 
     static void HandleP2PHandshakeRequest(
         P2PHandshakeRequest* package,
+        uint32_t package_size,
+        const sockaddr_in& from
+    ) noexcept;
+
+    static void HandleP2PHandshakeResponse(
+        P2PHandshakeResponse* package,
         uint32_t package_size,
         const sockaddr_in& from
     ) noexcept;
@@ -206,6 +213,9 @@ FORCE_INLINE void Server::RunHandlePackagesLoop() noexcept {
         if (type == P2P_HANDSHAKE_REQUEST &&
             buffer_size == sizeof(P2PHandshakeRequest))
             HANDLE_PACKAGE(P2PHandshakeRequest);
+        if (type == P2P_HANDSHAKE_RESPONSE &&
+            buffer_size == sizeof(P2PHandshakeResponse))
+            HANDLE_PACKAGE(P2PHandshakeResponse);
     }
 }
 
@@ -383,9 +393,11 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     }
     hkdf(chain_key, chain_key, shared);
 
+    /* Get the nonce from the package */
     Nonce* nonce = new Nonce(package->header.nonce);
 
     /* If all is OK, save the current peer */
+    /* TODO: check this */
     {
         Peers::Details details {
             .nonce = nonce,
@@ -703,8 +715,25 @@ FORCE_INLINE void Server::HandleGetPeerRequest(
     }
 }
 
-void Server::HandleP2PHandshakeRequest(
+FORCE_INLINE void Server::HandleP2PHandshakeRequest(
     P2PHandshakeRequest* const package,
+    const uint32_t package_size,
+    const sockaddr_in& from
+) noexcept {
+    /* Get the peer to transit for */
+    std::shared_lock details_lock(Peers::details_mutex);
+    const Peers::Details* const peer_details =
+        Peers::details->Get(package->header.destination_ip);
+    if (peer_details == nullptr) return;
+
+    /* Transit the package to the other peer */
+    main_socket.Send((char*)(void*)package,
+                     sizeof(P2PHandshakeRequest),
+                     peer_details->endpoint);
+}
+
+FORCE_INLINE void Server::HandleP2PHandshakeResponse(
+    P2PHandshakeResponse* const package,
     const uint32_t package_size,
     const sockaddr_in& from
 ) noexcept {

@@ -64,7 +64,7 @@ private:
             sockaddr_in endpoint;
             uint64_t last_to_package_timestamp;
             uint64_t last_from_package_timestamp;
-            uint64_t last_handshake_timestamp;
+            uint64_t next_handshake_timestamp;
             uint8_t key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
             uint8_t public_static_key[crypto_scalarmult_BYTES];
             UniqPtr<Nonce> nonce;
@@ -108,6 +108,18 @@ private:
         uint32_t package_size,
         const sockaddr_in& from
     ) noexcept;
+
+    static void HandleP2PHandshakeRequest(
+        P2PHandshakeRequest* package,
+        uint32_t package_size,
+        const sockaddr_in& from
+    );
+
+    static void HandleP2PHandshakeResponse(
+        P2PHandshakeResponse* package,
+        uint32_t package_size,
+        const sockaddr_in& from
+    );
 
     static void GetPeerFromServer(uint32_t peer_ip) noexcept;
 
@@ -178,8 +190,8 @@ FORCE_INLINE void Client::RunHandshakeLoop() {
         if (crypto_scalarmult(shared,
                               Server::ephemeral_keys->Secret(),
                               Server::public_key) == -1) {
-            ERROR_LOG("crypto_scalarmult: "
-                      "Failed to compute the shared secret");
+            WARN_LOG("crypto_scalarmult: "
+                     "Failed to compute the shared secret");
             continue;
         }
 
@@ -243,6 +255,12 @@ FORCE_INLINE void Client::RunHandlePackagesLoop() noexcept {
             buffer_size == sizeof(HandshakeResponse) &&
             equal(from, Server::endpoint))
             HANDLE_PACKAGE(HandshakeResponse);
+        if (type == P2P_HANDSHAKE_REQUEST &&
+            buffer_size == sizeof(P2PHandshakeRequest))
+            HANDLE_PACKAGE(P2PHandshakeRequest);
+        if (type == P2P_HANDSHAKE_RESPONSE &&
+            buffer_size == sizeof(P2PHandshakeResponse))
+            HANDLE_PACKAGE(P2PHandshakeResponse);
         if (type == GET_PEER_RESPONSE &&
             buffer_size == sizeof(GetPeerResponse) &&
             equal(from, Server::endpoint))
@@ -410,8 +428,8 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
     if (crypto_scalarmult(shared,
                           Server::ephemeral_keys->Secret(),
                           package->header.ephemeral_public_key) == -1) {
-        ERROR_LOG("crypto_scalarmult: "
-                  "Failed to compute the shared secret");
+        WARN_LOG("crypto_scalarmult: "
+                 "Failed to compute the shared secret");
         return;
     }
     hkdf(Server::chain_key, Server::chain_key, shared);
@@ -420,8 +438,8 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
     if (crypto_scalarmult(shared,
                           static_keys->Secret(),
                           package->header.ephemeral_public_key) == -1) {
-        ERROR_LOG("crypto_scalarmult: "
-                  "Failed to compute the shared secret");
+        WARN_LOG("crypto_scalarmult: "
+                 "Failed to compute the shared secret");
         return;
     }
     hkdf(Server::chain_key, Server::chain_key, shared);
@@ -562,17 +580,16 @@ FORCE_INLINE void Client::HandleGetPeerResponse(
     /* Save the peer ip */
     const uint32_t peer_ip = package->data.local_ip;
 
-    /* We aren't waiting for that peer anymore */
-    {
-        std::unique_lock temp_details_lock(Peers::temp_details_mutex);
-        Peers::TempDetails* const peer_temp_details =
-            Peers::temp_details->Get(peer_ip);
-        if (peer_temp_details != nullptr)
-            peer_temp_details->waiting_get_peer = false;
+    /* Try remove the entry if there is no such a peer
+     * And exit the method */
+    std::unique_lock temp_details_lock(Peers::temp_details_mutex);
+    if (package->data.real_ip == INADDR_ANY) {
+        Peers::temp_details->Delete(peer_ip);
+        return;
     }
 
-    /* If the peer isn't exist */
-    if (package->data.real_ip == INADDR_ANY) return;
+    /* Try to get the peer from the temp details dict */
+    Peers::TempDetails* peer_temp_details = Peers::temp_details->Get(peer_ip);
 
     /* Assemble the new endpoint */
     const sockaddr_in new_endpoint = {
@@ -580,11 +597,6 @@ FORCE_INLINE void Client::HandleGetPeerResponse(
         .sin_port = package->data.real_port,
         .sin_addr = { package->data.real_ip }
     };
-
-    /* Try to get the peer from the dictionary */
-    std::unique_lock temp_details_lock(Peers::temp_details_mutex);
-    Peers::TempDetails* peer_temp_details =
-        Peers::temp_details->Get(peer_ip);
 
     /* If there is no such a peer in the dictionary yet */
     if (peer_temp_details == nullptr) {
@@ -610,16 +622,206 @@ FORCE_INLINE void Client::HandleGetPeerResponse(
                crypto_scalarmult_BYTES);
     }
 
-    /* The client with the biggest static key
-     * must initialize the handshake */
+    /* The client with the biggest static key must initialize the handshake */
     if (KeyBuffer(static_keys->Public()) <
-        KeyBuffer(peer_temp_details->public_static_key)) return;
+        KeyBuffer(package->data.public_key)) return;
 
     /* If all is OK, send the handshake to the peer */
     std::thread(SendP2PHandshakeRequest,
                 peer_ip,
                 peer_temp_details,
                 true).detach();
+}
+
+FORCE_INLINE void Client::HandleP2PHandshakeRequest(
+    P2PHandshakeRequest* const package,
+    const uint32_t package_size,
+    const sockaddr_in& from
+) {
+    INFO_LOG("Receive a handshake request from the %s peer%s",
+             inet_ntoa({ package->header.source_ip }),
+             equal(Server::endpoint, from) ?
+             " via the server" : "");
+
+    /* Get the peer ip from the package */
+    const uint32_t peer_ip = package->header.source_ip;
+
+    /* Try to get the permanent peer details */
+    std::unique_lock details_lock(Peers::details_mutex);
+    Peers::Details* peer_details = Peers::details->Get(peer_ip);
+
+    /* Try to get the temporary peer details */
+    std::unique_lock temp_details_lock(Peers::temp_details_mutex);
+    Peers::TempDetails*  peer_temp_details = Peers::temp_details->Get(peer_ip);
+
+    /* If we know about the peer nothing */
+    if (peer_details == nullptr && peer_temp_details == nullptr) return;
+
+    /* Get the current timestamp and the package one */
+    const uint64_t timestamp = Time::Nanoseconds();
+    const uint64_t package_timestamp = package->header.timestamp;
+
+    /* Check the package timestamps delta */
+    const uint64_t timestamp_delta =
+        timestamp > package_timestamp ?
+        timestamp - package_timestamp :
+        package_timestamp - timestamp;
+    if (timestamp_delta > 180 * 1'000'000'000ULL) {
+        WARN_LOG("Invalid timestamp found");
+        return;
+    }
+
+    /* Compare the last peer timestamp and the package timestamp */
+    if (peer_details != nullptr &&
+        package_timestamp <= peer_details->last_from_package_timestamp) {
+        WARN_LOG("Duplicate message found");
+        return;
+    }
+
+    /* Init the chain key */
+    uint8_t chain_key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
+
+    /* Compute the first shared secret */
+    uint8_t shared[crypto_scalarmult_BYTES];
+    if (crypto_scalarmult(shared,
+                          static_keys->Secret(),
+                          package->header.ephemeral_public_key) == -1) {
+        WARN_LOG("crypto_scalarmult: "
+                 "Failed to compute the shared secret");
+        return;
+    }
+
+    /* Get the chained ChaCha20 key */
+    hkdf(chain_key, nullptr, shared);
+
+    /* Check the package sign */
+    unsigned long long dummy_len;
+    if (crypto_aead_chacha20poly1305_ietf_decrypt(
+        package->poly1305_tag,
+        &dummy_len,
+        nullptr,
+        package->poly1305_tag,
+        sizeof(package->poly1305_tag),
+        (uint8_t*)(void*)&package->header,
+        sizeof(package->header),
+        package->header.nonce,
+        chain_key
+    ) != 0) {
+        WARN_LOG("Forged message found");
+        return;
+    };
+
+    /* Save the current peer */
+    if (peer_details == nullptr) {
+        /* If we have not enough information about the peer */
+        if (peer_temp_details == nullptr) {
+            WARN_LOG("Can't save peer: "
+                     "Have not enough info");
+            return;
+        }
+
+        /* If all is OK */
+        Peers::details->Put(peer_ip, {
+            .endpoint = peer_temp_details->endpoint,
+            .last_from_package_timestamp = package->header.timestamp,
+            .nonce = new Nonce(package->header.nonce)
+        });
+
+        /* Update the peer details */
+        peer_details = Peers::details->Get(peer_ip);
+        memcpy(peer_details->public_static_key,
+               peer_temp_details->public_static_key,
+               crypto_scalarmult_BYTES);
+    /* If we already have the peer details, just update them */
+    } else {
+        if (peer_temp_details != nullptr) {
+            peer_details->endpoint = peer_temp_details->endpoint;
+            memcpy(peer_details->public_static_key,
+                   peer_temp_details->public_static_key,
+                   crypto_scalarmult_BYTES);
+        }
+        peer_details->last_from_package_timestamp =
+            package->header.timestamp;
+        peer_details->nonce = new Nonce(package->header.nonce);
+    }
+
+    /* Remove the temporary entry */
+    Peers::temp_details->Delete(peer_ip);
+    temp_details_lock.unlock();
+    peer_temp_details = nullptr;
+
+    /* Generate the ephemeral keys pair */
+    const Keys ephemeral_keys;
+
+    /* Compute the second shared secret and update the chain keys */
+    if (crypto_scalarmult(shared,
+                          ephemeral_keys.Secret(),
+                          package->header.ephemeral_public_key) == -1) {
+        WARN_LOG("crypto_scalarmult: "
+                 "Failed to compute the shared secret");
+        return;
+    }
+    hkdf(chain_key, chain_key, shared);
+
+    /* Compute the third shared secret and update the chain keys */
+    if (crypto_scalarmult(shared,
+                          ephemeral_keys.Secret(),
+                          peer_details != nullptr ?
+                          peer_details->public_static_key :
+                          peer_temp_details->public_static_key) == -1) {
+        WARN_LOG("crypto_scalarmult: "
+                 "Failed to compute the shared secret");
+        return;
+    }
+    hkdf(chain_key, chain_key, shared);
+
+    /* Update the peer's key */
+    memcpy(peer_details->key,
+           chain_key,
+           crypto_aead_chacha20poly1305_ietf_KEYBYTES);
+
+    /* Assemble the resposne */
+    P2PHandshakeResponse response(peer_details->nonce,
+                                  ephemeral_keys.Public(),
+                                  timestamp,
+                                  peer_ip);
+
+    /* Encrypt the response package */
+    {
+        unsigned long long dummy_len;
+        crypto_aead_chacha20poly1305_ietf_encrypt(
+            response.poly1305_tag,
+            &dummy_len,
+            nullptr,
+            0,
+            (uint8_t*)(void*)&response.header,
+            sizeof(response.header),
+            nullptr,
+            response.header.nonce,
+            peer_details->key
+        );
+    }
+
+    /* Send the encrypted package */
+    INFO_LOG("Sending the handshake resposne to %s peer%s",
+             inet_ntoa({ peer_ip }),
+             package->header.nat_probe ?
+             " via the server" : "");
+    main_socket.Send((char*)(void*)&response,
+                     sizeof(response),
+                     package->header.nat_probe ?
+                     Server::endpoint : peer_details->endpoint);
+}
+
+FORCE_INLINE void Client::HandleP2PHandshakeResponse(
+    P2PHandshakeResponse* const package,
+    const uint32_t package_size,
+    const sockaddr_in& from
+) {
+    INFO_LOG("Receive a handshake response from the %s peer%s",
+             inet_ntoa({ package->header.source_ip }),
+             equal(Server::endpoint, from) ?
+             " via the server" : "");
 }
 
 FORCE_INLINE void Client::GetPeerFromServer(const uint32_t peer_ip)
@@ -730,8 +932,8 @@ void Client::SendP2PHandshakeRequest(
         if (crypto_scalarmult(shared,
                               ephemeral_keys->Secret(),
                               peer_temp_details->public_static_key) == -1) {
-            ERROR_LOG("crypto_scalarmult: "
-                      "Failed to compute the shared secret");
+            WARN_LOG("crypto_scalarmult: "
+                     "Failed to compute the shared secret");
             continue;
         }
 
