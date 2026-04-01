@@ -22,8 +22,6 @@
 
 #include <cstring>
 #include <mutex>
-#include <netinet/in.h>
-#include <netinet/ip.h>
 #include <shared_mutex>
 
 /**

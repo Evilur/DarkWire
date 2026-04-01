@@ -22,7 +22,6 @@
 
 #include <cstring>
 #include <ctime>
-#include <netinet/in.h>
 #include <shared_mutex>
 #include <sodium.h>
 #include <thread>

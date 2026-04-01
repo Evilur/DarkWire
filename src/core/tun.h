@@ -3,6 +3,7 @@
 #include "main.h"
 #include "core/config.h"
 #include "exception/tun_error.h"
+#include "socket/udp_socket.h"
 #include "type/string.h"
 #include "util/class.h"
 #include "util/logger.h"
@@ -12,7 +13,6 @@
 #include <fcntl.h>
 #include <linux/if.h>
 #include <linux/if_tun.h>
-#include <netinet/ip.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 

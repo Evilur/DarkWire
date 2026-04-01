@@ -2,10 +2,10 @@
 
 #include "type/string.h"
 #include "core/key_buffer.h"
+#include "socket/udp_socket.h"
 #include "util/macro.h"
 
 #include <cstring>
-#include <netinet/in.h>
 #include <sodium.h>
 #include <type_traits>
 

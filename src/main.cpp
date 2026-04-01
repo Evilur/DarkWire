@@ -12,7 +12,6 @@
 #include <cstring>
 #include <exception>
 #include <fstream>
-#include <netinet/ip.h>
 #include <sodium.h>
 #include <thread>
 

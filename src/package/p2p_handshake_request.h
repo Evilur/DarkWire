@@ -2,11 +2,10 @@
 
 #include "main.h"
 #include "package_type.h"
+#include "socket/udp_socket.h"
 #include "util/nonce.h"
 
-#include <arpa/inet.h>
 #include <cstring>
-#include <netinet/in.h>
 #include <sodium.h>
 
 struct P2PHandshakeRequest final {

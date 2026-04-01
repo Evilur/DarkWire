@@ -1,9 +1,8 @@
 #pragma once
 
 #include "util/class.h"
+#include "socket/udp_socket.h"
 #include "util/macro.h"
-
-#include <netinet/in.h>
 
 /**
  * Class fo store the ip address in hosts bytes order and net bytes order

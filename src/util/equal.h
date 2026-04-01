@@ -1,9 +1,9 @@
 #pragma once
 
+#include "socket/udp_socket.h"
 #include "util/macro.h"
 
 #include <cstring>
-#include <netinet/in.h>
 
 template <typename T>
 FORCE_INLINE bool equal(const T& e1, const T& e2);

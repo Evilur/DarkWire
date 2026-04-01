@@ -2,9 +2,8 @@
 
 #include "socket/udp_socket.h"
 #include "core/keys.h"
+#include "socket/udp_socket.h"
 #include "type/net_addr.h"
-
-#include <netinet/in.h>
 
 class TUN;
 
