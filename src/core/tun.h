@@ -11,7 +11,6 @@
 
 #include <cstring>
 
-#define _WIN32
 #ifdef _WIN32
     #include <iphlpapi.h>
     #include <windows.h>
