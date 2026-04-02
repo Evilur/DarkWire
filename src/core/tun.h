@@ -10,11 +10,24 @@
 #include "util/system.h"
 
 #include <cstring>
-#include <fcntl.h>
-#include <linux/if.h>
-#include <linux/if_tun.h>
-#include <sys/ioctl.h>
-#include <unistd.h>
+
+#define _WIN32
+#ifdef _WIN32
+    #include <iphlpapi.h>
+    #include <windows.h>
+    #include <wintun.h>
+    #include <ws2tcpip.h>
+
+    #pragma comment(lib, "iphlpapi.lib")
+    #pragma comment(lib, "ws2_32.lib")
+#else
+    #include <fcntl.h>
+    #include <linux/if.h>
+    #include <linux/if_tun.h>
+    #include <linux/ip.h>
+    #include <sys/ioctl.h>
+    #include <unistd.h>
+#endif
 
 /**
  * Class for working with virtual network interface
@@ -38,11 +51,17 @@ public:
 
 private:
     const String _tun_name;
+
+#ifdef _WIN32
+#else
     const int32_t _tun_fd;
+#endif
 
     bool _is_up = false;
 };
 
+#ifdef _WIN32
+#else
 FORCE_INLINE TUN::TUN(const char* const name) : _tun_name(name),
     /* Open the TUN device */
     _tun_fd(open("/dev/net/tun", O_RDWR | O_CLOEXEC)) {
@@ -114,3 +133,4 @@ FORCE_INLINE void TUN::Write(const char* const buffer,
     TRACE_LOG("Writing %u bytes to the TUN", buffer_size);
     write(_tun_fd, buffer, buffer_size);
 }
+#endif
