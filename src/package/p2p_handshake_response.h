@@ -21,14 +21,16 @@ struct P2PHandshakeResponse final {
     explicit P2PHandshakeResponse(Nonce* nonce,
                                  const uint8_t* ephemeral_public_key,
                                  uint64_t timestamp,
-                                 uint32_t destination_ip) noexcept;
+                                 uint32_t destination_ip,
+                                 bool nat_probe) noexcept;
 } __attribute__((packed));
 
 FORCE_INLINE
 P2PHandshakeResponse::P2PHandshakeResponse(Nonce* nonce,
                                            const uint8_t* ephemeral_public_key,
                                            const uint64_t timestamp,
-                                           const uint32_t destination_ip)
+                                           const uint32_t destination_ip,
+                                           const bool nat_probe)
 noexcept {
     /* Set the package type */
     header.type = P2P_HANDSHAKE_RESPONSE;
@@ -49,4 +51,7 @@ noexcept {
 
     /* Set the destination ip */
     header.destination_ip = destination_ip;
+
+    /* Set the nat probe */
+    header.nat_probe = nat_probe;
 }

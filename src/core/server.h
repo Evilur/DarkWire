@@ -216,6 +216,9 @@ FORCE_INLINE void Server::RunHandlePackagesLoop() noexcept {
         if (type == GET_PEER_REQUEST &&
             buffer_size == sizeof(GetPeerRequest))
             HANDLE_PACKAGE(GetPeerRequest)
+        if (type == NAT_PROBE_RESPONSE &&
+            buffer_size == sizeof(NatProbeResponse))
+            HANDLE_PACKAGE(NatProbeResponse);
         if (type == P2P_HANDSHAKE_REQUEST &&
             buffer_size == sizeof(P2PHandshakeRequest))
             HANDLE_PACKAGE(P2PHandshakeRequest);

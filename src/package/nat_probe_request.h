@@ -7,28 +7,28 @@
 
 #include <sodium.h>
 
-struct PingRequest final {
-    enum ReplayType : uint8_t { DIRECT, RELAY_SERVER };
-
+struct NatProbeRequest final {
     struct {
         PackageType type;
         uint8_t nonce[crypto_aead_chacha20poly1305_ietf_NPUBBYTES];
         uint32_t source_ip;
         uint32_t destination_ip;
-        ReplayType replay_type;
+        uint64_t timestamp;
     } __attribute__((packed)) header;
     uint8_t poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
-    PingRequest(Nonce* nonce,
-                uint32_t destination_ip,
-                ReplayType replay_type) noexcept;
+    NatProbeRequest(Nonce* nonce,
+                    uint32_t destination_ip,
+                    uint64_t timestamp) noexcept;
 } __attribute__((packed));
 
-FORCE_INLINE PingRequest::PingRequest(Nonce* const nonce,
-                                      const uint32_t destination_ip,
-                                      const ReplayType replay_type) noexcept {
+FORCE_INLINE NatProbeRequest::NatProbeRequest(
+    Nonce* const nonce,
+    const uint32_t destination_ip,
+    const uint64_t timestamp
+) noexcept {
     /* Set the package type */
-    header.type = PING_REQUEST;
+    header.type = NAT_PROBE_REQUEST;
 
     /* Set the nonce */
     nonce->Copy(header.nonce);
@@ -39,6 +39,6 @@ FORCE_INLINE PingRequest::PingRequest(Nonce* const nonce,
     /* Set the destination ip */
     header.destination_ip = destination_ip;
 
-    /* Set the replay type */
-    header.replay_type = replay_type;
+    /* Save the timestamp */
+    header.timestamp = timestamp;
 }
