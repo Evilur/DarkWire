@@ -8,7 +8,7 @@
 #include <exception>
 #include <unistd.h>
 
-#ifdef _WIN64
+#ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #else
@@ -62,7 +62,7 @@ public:
 };
 
 FORCE_INLINE UDPSocket::UDPSocket() {
-    #ifdef _WIN64
+    #ifdef _WIN32
     WSADATA wsa;
     if (WSAStartup(MAKEWORD(2,2), &wsa) != 0) {
         ERROR_LOG("Can't startup the WSA");
@@ -89,7 +89,7 @@ FORCE_INLINE UDPSocket::UDPSocket() {
 
 FORCE_INLINE UDPSocket::~UDPSocket() noexcept {
     if (_socket_fd == -1) return;
-    #ifdef _WIN64
+    #ifdef _WIN32
     closesocket(_socket_fd);
     WSACleanup();
     #else
@@ -108,7 +108,7 @@ FORCE_INLINE void UDPSocket::Bind(const sockaddr_in& address) const {
     /* Set options */
     constexpr int32_t reuse = 1;
     SetOption(SO_REUSEADDR, &reuse, sizeof(reuse));
-    #ifndef _WIN64
+    #ifndef _WIN32
     SetOption(SO_REUSEPORT, &reuse, sizeof(reuse));
     #endif
 
@@ -234,7 +234,7 @@ const noexcept {
 FORCE_INLINE
 void UDPSocket::SetOption(const int32_t optname, const void* const optval,
                           const socklen_t optlen) const noexcept {
-#ifdef _WIN64
+#ifdef _WIN32
     if (setsockopt(_socket_fd, SOL_SOCKET,
                    optname, (const char*)optval, optlen) == -1)
 #else
