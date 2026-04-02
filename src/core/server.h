@@ -8,6 +8,8 @@
 #include "package/handshake_request.h"
 #include "package/handshake_response.h"
 #include "package/keep_alive.h"
+#include "package/nat_probe_request.h"
+#include "package/nat_probe_response.h"
 #include "package/p2p_handshake_request.h"
 #include "package/p2p_handshake_response.h"
 #include "package/package_type.h"
@@ -95,6 +97,12 @@ private:
 
     static void HandleP2PHandshakeResponse(
         P2PHandshakeResponse* package,
+        uint32_t package_size,
+        const sockaddr_in& from
+    ) noexcept;
+
+    static void HandleNatProbeResponse(
+        NatProbeResponse* package,
         uint32_t package_size,
         const sockaddr_in& from
     ) noexcept;
@@ -713,36 +721,38 @@ FORCE_INLINE void Server::HandleGetPeerRequest(
     }
 }
 
+#define TRANSIT_PACKAGE(T)                                                    \
+{                                                                             \
+    /* Get the peer to transit for */                                         \
+    std::shared_lock details_lock(Peers::details_mutex);                      \
+    const Peers::Details* const peer_details =                                \
+        Peers::details->Get(package->header.destination_ip);                  \
+    if (peer_details == nullptr) return;                                      \
+                                                                              \
+    /* Transit the package to the other peer */                               \
+    TRACE_LOG("Transit the '%s' package to the %s:%hu",                       \
+              #T,                                                             \
+              inet_ntoa(peer_details->endpoint.sin_addr),                     \
+              ntohs(peer_details->endpoint.sin_port));                        \
+    main_socket.Send((char*)(void*)package,                                   \
+                     package_size,                                            \
+                     peer_details->endpoint);                                 \
+}
+
 FORCE_INLINE void Server::HandleP2PHandshakeRequest(
     P2PHandshakeRequest* const package,
     const uint32_t package_size,
     const sockaddr_in& from
-) noexcept {
-    /* Get the peer to transit for */
-    std::shared_lock details_lock(Peers::details_mutex);
-    const Peers::Details* const peer_details =
-        Peers::details->Get(package->header.destination_ip);
-    if (peer_details == nullptr) return;
-
-    /* Transit the package to the other peer */
-    main_socket.Send((char*)(void*)package,
-                     sizeof(P2PHandshakeRequest),
-                     peer_details->endpoint);
-}
+) noexcept { TRANSIT_PACKAGE(P2PHandshakeRequest); }
 
 FORCE_INLINE void Server::HandleP2PHandshakeResponse(
     P2PHandshakeResponse* const package,
     const uint32_t package_size,
     const sockaddr_in& from
-) noexcept {
-    /* Get the peer to transit for */
-    std::shared_lock details_lock(Peers::details_mutex);
-    const Peers::Details* const peer_details =
-        Peers::details->Get(package->header.destination_ip);
-    if (peer_details == nullptr) return;
+) noexcept { TRANSIT_PACKAGE(P2PHandshakeResponse); }
 
-    /* Transit the package to the other peer */
-    main_socket.Send((char*)(void*)package,
-                     sizeof(P2PHandshakeRequest),
-                     peer_details->endpoint);
-}
+FORCE_INLINE void Server::HandleNatProbeResponse(
+    NatProbeResponse* const package,
+    const uint32_t package_size,
+    const sockaddr_in& from
+) noexcept { TRANSIT_PACKAGE(NatProbeResponse); }
