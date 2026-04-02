@@ -124,7 +124,6 @@ private:
 
     static void SendP2PHandshakeRequest(
         uint32_t peer_ip,
-        Peers::TempDetails* peer_temp_details,
         bool probing_channel
     );
 };
@@ -626,10 +625,7 @@ FORCE_INLINE void Client::HandleGetPeerResponse(
         KeyBuffer(package->data.public_key)) return;
 
     /* If all is OK, send the handshake to the peer */
-    std::thread(SendP2PHandshakeRequest,
-                peer_ip,
-                peer_temp_details,
-                true).detach();
+    std::thread(SendP2PHandshakeRequest, peer_ip, true).detach();
 }
 
 FORCE_INLINE void Client::HandleP2PHandshakeRequest(
@@ -993,18 +989,17 @@ noexcept {
 FORCE_INLINE
 void Client::SendP2PHandshakeRequest(
     const uint32_t peer_ip,
-    Peers::TempDetails* const peer_temp_details,
     const bool probing_channel
 ) {
-    /* If we already are waiting for the response */
-    {
-        std::shared_lock temp_details_lock(Peers::temp_details_mutex);
-        if (peer_temp_details->waiting_handshake_response) return;
-        peer_temp_details->waiting_handshake_response = true;
-    }
-
-    /* Lock the temp details */
+    /* Try to get the temp peer details */
     std::unique_lock temp_details_lock(Peers::temp_details_mutex);
+    Peers::TempDetails* const peer_temp_details =
+        Peers::temp_details->Get(peer_ip);
+    if (peer_temp_details == nullptr) return; //TODO: Try to get permanent one
+
+    /* If we already are waiting for the response */
+    if (peer_temp_details->waiting_handshake_response) return;
+    peer_temp_details->waiting_handshake_response = true;
 
     /* Maximum: 8 attemps
      * Every: 6 seconds
