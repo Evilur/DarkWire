@@ -27,9 +27,9 @@ public:
 
     static void NanoSleep(uint64_t nanoseconds) noexcept;
 
-    static void WaitFor(uint64_t timestamp) noexcept;
+    static void WaitUntil(uint64_t timestamp) noexcept;
 
-    static void NWaitFor(uint64_t timestamp) noexcept;
+    static void NanoWaitUntil(uint64_t timestamp) noexcept;
 };
 
 FORCE_INLINE uint64_t Time::Seconds() noexcept {
@@ -74,13 +74,13 @@ FORCE_INLINE void Time::NanoSleep(const uint64_t nanoseconds) noexcept {
 #endif
 }
 
-FORCE_INLINE void Time::WaitFor(const uint64_t timestamp) noexcept {
+FORCE_INLINE void Time::WaitUntil(const uint64_t timestamp) noexcept {
     const uint64_t current_timestamp = Time::Seconds();
     if (current_timestamp > timestamp) return;
     Time::Sleep(timestamp - current_timestamp);
 }
 
-FORCE_INLINE void Time::NWaitFor(const uint64_t timestamp) noexcept {
+FORCE_INLINE void Time::NanoWaitUntil(const uint64_t timestamp) noexcept {
     const uint64_t current_timestamp = Time::Nanoseconds();
     if (current_timestamp > timestamp) return;
     Time::NanoSleep(timestamp - current_timestamp);
