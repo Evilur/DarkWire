@@ -64,6 +64,7 @@ private:
         struct Details final {
             sockaddr_in endpoint;
             uint64_t last_from_package_timestamp;
+            uint64_t last_to_package_timestamp;
             uint64_t next_handshake_timestamp;
             uint8_t key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
             uint8_t public_static_key[crypto_scalarmult_BYTES];
@@ -78,6 +79,7 @@ private:
             UniqPtr<Keys> ephemeral_keys = nullptr;
             bool waiting_get_peer;
             bool waiting_handshake_response;
+            bool waiting_nat_probe;
         } __attribute__((aligned(128)));
 
         static inline Dictionary<uint32_t, Details, uint8_t>*
@@ -135,10 +137,7 @@ private:
 
     static void GetPeerFromServer(uint32_t peer_ip) noexcept;
 
-    static void SendP2PHandshakeRequest(
-        uint32_t peer_ip,
-        bool probing_channel
-    );
+    static void SendP2PHandshakeRequest(uint32_t peer_ip, bool nat_probe);
 
     static void NatProbe(uint32_t peer_ip, sockaddr_in real_endpoint);
 };
@@ -289,76 +288,88 @@ FORCE_INLINE void Client::RunHandlePackagesLoop() noexcept {
 }
 
 FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
+    /* A function to send the keep-alives to the peer */
+    void (*const send_keepalive)(Peers::Details*, uint64_t timestamp) =
+        [](Peers::Details* const peer_details, const uint64_t timestamp) {
+        /* Assemble the package */
+        KeepAlive package(peer_details->nonce, timestamp);
+
+        /* Sign the package */
+        {
+            unsigned long long dummy_len;
+            crypto_aead_chacha20poly1305_ietf_encrypt(
+                package.poly1305_tag,
+                &dummy_len,
+                nullptr,
+                0,
+                (uint8_t*)(void*)&package.header,
+                sizeof(package.header),
+                nullptr,
+                package.header.nonce,
+                peer_details->key
+            );
+        }
+
+        /* Update the last package timestamp */
+        peer_details->last_to_package_timestamp = timestamp;
+
+        /* Send the package */
+        main_socket.Send((char*)(void*)&package,
+                         sizeof(package),
+                         peer_details->endpoint);
+    };
+
     /* Send keep-alives every 10 seconds */
+    constexpr uint64_t keepalive = 10 * 1'000'000'000ULL;
+    uint64_t next_keepalive_timestamp = Time::Nanoseconds() + keepalive;
     for (;;) {
-        /* Sleep for 10 seconds */
-        usleep(10 * 1'000'000);
+        /* Wait for the next keep-alive timestamp */
+        Time::NanoWaitUntil(next_keepalive_timestamp);
 
         /* Get the current timestamp */
         const uint64_t timestamp = Time::Nanoseconds();
 
-        /* Send the keep alive package to the server */
+        /* Get the server's details */
         std::shared_lock details_lock(Peers::details_mutex);
-
-        /* Check the last package timestamp */
-        {
-            Peers::Details* server_details;
-            {
-                std::lock_guard server_lock(Server::mutex);
-                server_details = Peers::details->Get(Server::local_ip);
-            }
-            if (server_details == nullptr) continue;
-
-            /* Assemble the package and encrypt it */
-            KeepAlive keep_alive(server_details->nonce, timestamp);
-            unsigned long long data_size;
-            crypto_aead_chacha20poly1305_ietf_encrypt(
-                keep_alive.poly1305_tag,
-                &data_size,
-                nullptr,
-                0,
-                (uint8_t*)(void*)&keep_alive.header,
-                sizeof(keep_alive.header),
-                nullptr,
-                keep_alive.header.nonce,
-                server_details->key
-            );
-
-            /* Send the keep-alive */
-            INFO_LOG("Sending the keep-alive package to the server");
-            main_socket.Send((char*)(void*)&keep_alive,
-                             sizeof(keep_alive),
-                             Server::endpoint);
+        Peers::Details* const server_details =
+            Peers::details->Get(Server::local_ip);
+        if (server_details == nullptr) {
+            next_keepalive_timestamp =
+                timestamp + (6 * 1'000'000'000ULL);
+            continue;
         }
 
-        /* Send keep-alive packages to all the active peers */
+        /* Send the keep-alive */
+        if (timestamp - server_details->last_to_package_timestamp >=
+            keepalive) {
+            INFO_LOG("Sending a keep-alive to the server");
+            send_keepalive(server_details, timestamp);
+        }
+
+        /* Set the server's last package timestamp as the oldest one */
+        uint64_t oldest_timestamp = server_details->last_to_package_timestamp;
+
+        /* Loop through all the peers */
         for (auto& [ _, peer_details ] : *Peers::details) {
-            /* Check for server as relay */
+            /* If we use the server as relay */
             if (equal(peer_details.endpoint, Server::endpoint)) continue;
 
-            /* Assebmle the package and encrypt it */
-            KeepAlive keep_alive(peer_details.nonce, timestamp);
-            unsigned long long data_size;
-            crypto_aead_chacha20poly1305_ietf_encrypt(
-                keep_alive.poly1305_tag,
-                &data_size,
-                nullptr,
-                0,
-                (uint8_t*)(void*)&keep_alive.header,
-                sizeof(keep_alive.header),
-                nullptr,
-                keep_alive.header.nonce,
-                peer_details.key
-            );
+            /* Send the keep-alive */
+            if (timestamp - peer_details.last_to_package_timestamp >=
+                keepalive) {
+                INFO_LOG("Sending a keep-alive to the %s:%hu",
+                         inet_ntoa(peer_details.endpoint.sin_addr),
+                         ntohs(peer_details.endpoint.sin_port));
+                send_keepalive(&peer_details, timestamp);
+            }
 
-            /* If all is OK, send the keep alive */
-            TRACE_LOG("Sending the keep-alive package to the %s:%hu",
-                      inet_ntoa(peer_details.endpoint.sin_addr),
-                      ntohs(peer_details.endpoint.sin_port));
-            main_socket.Send((char*)(void*)&keep_alive,
-                             sizeof(keep_alive),
-                             peer_details.endpoint);
+            /* Update the oldest timestamp */
+            if (peer_details.last_to_package_timestamp < oldest_timestamp)
+                oldest_timestamp = peer_details.last_to_package_timestamp;
         }
+
+        /* Update the next keep-alive according to the oldest timestamp */
+        next_keepalive_timestamp = oldest_timestamp + keepalive;
     }
 }
 
@@ -386,13 +397,15 @@ noexcept {
         }
 
         /* Get the server peer */
-        std::lock_guard server_lock(Server::mutex);
         peer_details = Peers::details->Get(Server::local_ip);
         if (peer_details == nullptr) return;
 
         /* Set the destination ip */
         destination_ip = Server::local_ip;
     }
+
+    /* Update the last to package timestamp */
+    peer_details->last_to_package_timestamp = timestamp;
 
     /* Update the package header */
     package.UpdateHeader(peer_details->nonce, destination_ip, timestamp);
@@ -529,9 +542,18 @@ FORCE_INLINE void Client::HandleTransferData(
 
     /* Get the key pointer */
     std::shared_lock details_lock(Peers::details_mutex);
-    const Peers::Details* const peers_details =
+    Peers::Details* const peers_details =
         Peers::details->Get(package->header.source_ip);
     if (peers_details == nullptr) { return; }
+
+    /* Get the package timestamp */
+    const uint64_t package_timestamp = package->header.timestamp;
+
+    /* Check the package for duplicate */
+    if (package_timestamp <= peers_details->last_from_package_timestamp) {
+        WARN_LOG("Duplicate message found");
+        return;
+    }
 
     /* Try to decrypt the package */
     unsigned long long data_size;
@@ -549,6 +571,9 @@ FORCE_INLINE void Client::HandleTransferData(
         WARN_LOG("Forged message found");
         return;
     }
+
+    /* If all is OK, update the timestamp */
+    peers_details->last_from_package_timestamp = package_timestamp;
 
     /* Write the package to the tun */
     tun->Write(package->data, (uint32_t)data_size);
@@ -1175,10 +1200,8 @@ noexcept {
 }
 
 FORCE_INLINE
-void Client::SendP2PHandshakeRequest(
-    const uint32_t peer_ip,
-    const bool probing_channel
-) {
+void Client::SendP2PHandshakeRequest(const uint32_t peer_ip,
+                                     const bool nat_probe) {
     /* Try to get the temp peer details */
     std::unique_lock temp_details_lock(Peers::temp_details_mutex);
     Peers::TempDetails* const peer_temp_details =
@@ -1195,7 +1218,7 @@ void Client::SendP2PHandshakeRequest(
     for (uint8_t i = 0; i < 8 && Peers::temp_details->Has(peer_ip); i++) {
         INFO_LOG("Sending a handshake request to the %s peer%s",
                  inet_ntoa({ peer_ip }),
-                 probing_channel ? " via the server" : "");
+                 nat_probe ? " via the server" : "");
 
         /* Get the current timestamp */
         const uint64_t timestamp = Time::Nanoseconds();
@@ -1218,7 +1241,7 @@ void Client::SendP2PHandshakeRequest(
                                     ephemeral_keys->Public(),
                                     timestamp,
                                     peer_ip,
-                                    probing_channel);
+                                    nat_probe);
 
         /* Compute the first shared secret */
         uint8_t shared[crypto_scalarmult_BYTES];
@@ -1234,22 +1257,24 @@ void Client::SendP2PHandshakeRequest(
         hkdf(chain_key, nullptr, shared);
 
         /* Sign the package */
-        unsigned long long dummy_len;
-        crypto_aead_chacha20poly1305_ietf_encrypt(
-            package.poly1305_tag,
-            &dummy_len,
-            nullptr,
-            0,
-            (uint8_t*)(void*)&package.header,
-            sizeof(package.header),
-            nullptr,
-            package.header.nonce,
-            chain_key
-        );
+        {
+            unsigned long long dummy_len;
+            crypto_aead_chacha20poly1305_ietf_encrypt(
+                package.poly1305_tag,
+                &dummy_len,
+                nullptr,
+                0,
+                (uint8_t*)(void*)&package.header,
+                sizeof(package.header),
+                nullptr,
+                package.header.nonce,
+                chain_key
+            );
+        }
 
         /* Get the endpoint */
         sockaddr_in endpoint;
-        if (probing_channel) {
+        if (nat_probe) {
             std::lock_guard server_lock(Server::mutex);
             endpoint = Server::endpoint;
         } else endpoint = peer_temp_details->endpoint;
@@ -1310,6 +1335,9 @@ FORCE_INLINE void Client::NatProbe(const uint32_t peer_ip,
                 peer_details->key
             );
         }
+
+        /* Update the last to package timestamp */
+        peer_details->last_to_package_timestamp = timestamp;
 
         /* Send the package to the real endpoint */
         TRACE_LOG("Sending a nat probe request to the %s peer",
