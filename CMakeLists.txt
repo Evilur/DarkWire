@@ -12,15 +12,17 @@ IF (CMAKE_BUILD_TYPE STREQUAL "Debug")
     SET(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 ELSE ()
     SET(CMAKE_CXX_FLAGS "-g0 -O2 -Winline -static \
+        -fdiagnostics-color=always \
         -finline-functions \
+        -finline-limit=99999999999999 \
         -finline-small-functions \
-        --inline-limit=9999999999 \
+        --inline-limit=99999999999999 \
         --param large-stack-frame=2147483647 \
         --param large-stack-frame-growth=2147483647 \
         --param max-inline-insns-single=2147483647 \
         --param max-inline-insns-auto=2147483647 \
         -march=native \
-        -flto")
+        -flto=128")
 ENDIF ()
 
 # Search header files in the 'src' directory
