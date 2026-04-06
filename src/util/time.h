@@ -34,13 +34,13 @@ public:
 
 FORCE_INLINE uint64_t Time::Seconds() noexcept {
     timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
+    clock_gettime(CLOCK_REALTIME, &now);
     return (uint64_t)now.tv_sec;
 }
 
 FORCE_INLINE uint64_t Time::Nanoseconds() noexcept {
     timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
+    clock_gettime(CLOCK_REALTIME, &now);
     return ((uint64_t)now.tv_sec * 1'000'000'000ULL) + (uint64_t)now.tv_nsec;
 }
 
