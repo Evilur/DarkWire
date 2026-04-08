@@ -13,7 +13,7 @@
  */
 class Nonce final {
 public:
-    PREVENT_COPY_ALLOW_MOVE(Nonce);
+    PREVENT_COPY_AND_MOVE(Nonce);
 
     Nonce() noexcept;
 
