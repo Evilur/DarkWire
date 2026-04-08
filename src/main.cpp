@@ -15,16 +15,6 @@
 #include <sodium.h>
 #include <thread>
 
-#ifdef _WIN32
-    #include <io.h>
-    #define ISATTY _isatty
-    #define FILENO _fileno
-#else
-    #include <unistd.h>
-    #define ISATTY isatty
-    #define FILENO fileno
-#endif
-
 int32_t main(const int32_t argc, const char* const* const argv) {
     /* Bind the 'on_terminate' handler */
     std::set_terminate(on_terminate);
@@ -335,7 +325,7 @@ static int32_t handle_config(const char* const name) {
     }
 
     /* Create the interface and return the success code */
-    tun = new TUN(config_path.stem().c_str());
+    tun = new TUN(config_path.stem().string().c_str());
     return 0;
 }
 

@@ -20,8 +20,12 @@ public:
     /* Initialize the class */
     static void Init();
 
+/* If we are compiling for Windows */
+#ifdef _WIN32
+    static inline const fs::path CONFIG_DIR =
+        std::filesystem::path(std::getenv("APPDATA")) / "DarkWire";
 /* If we are compiling for Unix based */
-#if defined(__unix__) || defined(__unix) || defined(unix)
+#else
     /* Get the config directory */
     static inline const fs::path CONFIG_DIR = "/etc/darkwire";
 #endif

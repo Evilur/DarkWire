@@ -5,6 +5,31 @@
 #include "socket/udp_socket.h"
 #include "type/net_addr.h"
 
+#ifdef _WIN32
+    #include <io.h>
+#pragma pack(push, 1)
+    struct iphdr {
+        uint8_t  ihl : 4;
+        uint8_t  version : 4;
+        uint8_t  tos;
+        uint16_t tot_len;
+        uint16_t id;
+        uint16_t frag_off;
+        uint8_t  ttl;
+        uint8_t  protocol;
+        uint16_t check;
+        uint32_t saddr;
+        uint32_t daddr;
+    };
+#pragma pack(pop)
+    #define ISATTY _isatty
+    #define FILENO _fileno
+#else
+    #include <unistd.h>
+    #define ISATTY isatty
+    #define FILENO fileno
+#endif
+
 class TUN;
 
 inline enum : char { CLIENT, SERVER } mode = CLIENT;

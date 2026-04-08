@@ -9,6 +9,7 @@
 #endif
 
 #include <chrono>
+#include <thread>
 
 /**
  * Static class for getting current time
