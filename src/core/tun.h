@@ -190,7 +190,7 @@ FORCE_INLINE void TUN::Up() noexcept {
         System::Exec(command);
 
     /* Set up the interface */
-    in_addr addr { .s_addr = local_ip.Netb() };
+    in_addr addr { local_ip.Netb() };
     System::Exec(
         String::Format(
             "netsh interface ipv4 set address name=\"%s\" "
@@ -300,7 +300,7 @@ FORCE_INLINE void TUN::Up() noexcept {
         System::Exec(command);
 
     /* Up the interface */
-    in_addr addr { .s_addr = local_ip.Netb() };
+    in_addr addr { local_ip.Netb() };
     System::Exec(String::Format("ip addr add %s/%hhu dev %s",
                                 inet_ntoa(addr),
                                 netmask,
