@@ -17,6 +17,8 @@
 #include <cstdint>
 class Time final {
 public:
+    static void Run() noexcept;
+
     static uint64_t Now() noexcept;
 
     static uint64_t Delta(uint64_t time1, uint64_t time2) noexcept;
@@ -24,12 +26,23 @@ public:
     static void Sleep(uint64_t seconds) noexcept;
 
     static void WaitUntil(uint64_t timestamp) noexcept;
+
+private:
+    static inline timespec _now;
 };
 
+FORCE_INLINE void Time::Run() noexcept {
+    for (;;) {
+        /* Get the current time */
+        clock_gettime(CLOCK_REALTIME, &_now);
+
+        /* Wait for one sec */
+        Sleep(1);
+    }
+}
+
 FORCE_INLINE uint64_t Time::Now() noexcept {
-    timespec now;
-    clock_gettime(CLOCK_REALTIME, &now);
-    return (uint64_t)now.tv_sec;
+    return (uint64_t)_now.tv_sec;
 }
 
 FORCE_INLINE uint64_t Time::Delta(const uint64_t time1,

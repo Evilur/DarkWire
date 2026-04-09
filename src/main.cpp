@@ -38,6 +38,9 @@ int32_t main(const int32_t argc, const char* const* const argv) {
     /* Init static classes */
     Path::Init();
 
+    /* Run the time */
+    std::thread(Time::Run).detach();
+
     /* Read the argument */
     const char* const arg = argv[1];
     if (strcmp(arg, "-h") == 0 || strcmp(arg, "--help") == 0)
