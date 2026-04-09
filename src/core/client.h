@@ -1313,8 +1313,8 @@ FORCE_INLINE void Client::NatProbe(const uint32_t peer_ip,
      * <this peer> -> <second peer> -> <relay server> -> <this peer> */
     #pragma unroll
     for (uint8_t i = 0; i < 16; ++i) {
-        /* Wait for 250 ms */
-        usleep(250 * 1'000);
+        /* Wait for 1 sec */
+        Time::Sleep(1);
 
         /* Try to get the peer details */
         std::shared_lock details_lock(Peers::details_mutex);
