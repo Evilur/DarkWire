@@ -2,7 +2,6 @@
 
 #include "main.h"
 #include "package_type.h"
-#include "socket/udp_socket.h"
 #include "util/nonce.h"
 
 #include <cstring>

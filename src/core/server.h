@@ -8,7 +8,6 @@
 #include "package/handshake_request.h"
 #include "package/handshake_response.h"
 #include "package/keep_alive.h"
-#include "package/nat_probe_request.h"
 #include "package/nat_probe_response.h"
 #include "package/p2p_handshake_request.h"
 #include "package/p2p_handshake_response.h"
@@ -21,6 +20,7 @@
 #include "util/class.h"
 #include "util/hkdf.h"
 #include "util/logger.h"
+#include "util/time.h"
 
 #include <cstring>
 #include <mutex>
@@ -49,9 +49,11 @@ private:
         struct Details final {
             UniqPtr<Nonce> nonce;
             sockaddr_in endpoint;
+            uint64_t last_handshake_timestamp;
+            int64_t from_sequence_number;
+            int64_t to_sequence_number;
             uint8_t static_public_key[crypto_scalarmult_BYTES];
-            uint8_t chain_key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
-            uint64_t last_timestamp;
+            uint8_t key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
         } __attribute__((aligned(128)));
 
         static inline uint32_t number = 0;
@@ -152,11 +154,13 @@ FORCE_INLINE void Server::HandleTunPackage(TransferData& package,
 noexcept {
     /* Try to get the peers details */
     std::shared_lock details_lock(Peers::details_mutex);
-    Peers::Details* const details = Peers::details->Get(destination_ip);
-    if (details == nullptr) return;
+    Peers::Details* const peer_details = Peers::details->Get(destination_ip);
+    if (peer_details == nullptr) return;
 
     /* Update the package header */
-    package.UpdateHeader(details->nonce, destination_ip, Time::Nanoseconds());
+    package.UpdateHeader(peer_details->nonce,
+                         peer_details->to_sequence_number++,
+                         destination_ip);
 
     /* Encrypt the package */
     unsigned long long data_size;
@@ -169,13 +173,13 @@ noexcept {
         sizeof(package.header),
         nullptr,
         package.header.nonce,
-        details->chain_key
+        peer_details->key
     );
 
     /* Send the encrypted message */
     main_socket.Send((char*)(void*)&package,
                      (int64_t)(sizeof(package.header) + data_size),
-                     details->endpoint);
+                     peer_details->endpoint);
 }
 
 FORCE_INLINE void Server::RunHandlePackagesLoop() noexcept {
@@ -291,16 +295,11 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     /* Check the timestamp */
     {
         /* Get the current time */
-        uint64_t current_time = (uint64_t)std::time(nullptr);
-        uint64_t client_timestamp = package->data.timestamp;
-
-        /* Get the delta time */
-        uint64_t delta_time = current_time > client_timestamp
-                                 ? current_time - client_timestamp
-                                 : client_timestamp - current_time;
+        uint64_t current_timestamp = Time::Now();
+        uint64_t package_timestamp = package->header.timestamp;
 
         /* If the time delta is too big */
-        if (delta_time > 120) return;
+        if (Time::Delta(current_timestamp, package_timestamp) > 120) return;
 
         /* Get the last timestamp for such a key */
         std::lock_guard timestamps_lock(Peers::timestamps_mutex);
@@ -308,10 +307,10 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
             Peers::timestamps->Get(package->data.static_public_key);
 
         /* Compare current timestamp with the last one */
-        if (client_timestamp <= *last_timestamp) return;
+        if (package_timestamp <= *last_timestamp) return;
 
         /* If all is ok, update the last timestamp */
-        *last_timestamp = client_timestamp;
+        *last_timestamp = package_timestamp;
     }
 
     /* Variables for the response (default is data from the request) */
@@ -347,7 +346,7 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
             const uint32_t start = network_prefix.Hostb();
             const uint32_t end = broadcast.Hostb();
             NetAddr random_ip; random_ip.SetHostb(
-                (uint32_t)(start + (rand() % (end - start + 1)))
+                (start + ((uint32_t)rand() % (end - start + 1)))
             );
 
             /* Try to get that ip from the details list */
@@ -411,37 +410,41 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
         Peers::Details details {
             .nonce = nonce,
             .endpoint = from,
-            .last_timestamp = Time::Nanoseconds()
+            .last_handshake_timestamp = Time::Now(),
+            .from_sequence_number = 0,
+            .to_sequence_number = 0
         };
         std::unique_lock details_lock(Peers::details_mutex);
         memcpy(details.static_public_key,
                package->data.static_public_key,
                crypto_scalarmult_BYTES);
-        memcpy(details.chain_key,
+        memcpy(details.key,
                chain_key,
                crypto_aead_chacha20poly1305_ietf_KEYBYTES);
         Peers::details->Put(response_ip, std::move(details));
     }
 
     /* Assemble the response */
-    HandshakeResponse response(ephemeral_keys.Public(),
-                               nonce,
+    HandshakeResponse response(nonce,
+                               ephemeral_keys.Public(),
                                response_ip,
                                response_netmask);
 
     /* Encrypt the resposne */
-    unsigned long long dummy_len;
-    crypto_aead_chacha20poly1305_ietf_encrypt(
-        (uint8_t*)(void*)&response.data,
-        &dummy_len,
-        (uint8_t*)(void*)&response.data,
-        sizeof(response.data),
-        (uint8_t*)(void*)&response.header,
-        sizeof(response.header),
-        nullptr,
-        response.header.nonce,
-        chain_key
-    );
+    {
+        unsigned long long dummy_len;
+        crypto_aead_chacha20poly1305_ietf_encrypt(
+            (uint8_t*)(void*)&response.data,
+            &dummy_len,
+            (uint8_t*)(void*)&response.data,
+            sizeof(response.data),
+            (uint8_t*)(void*)&response.header,
+            sizeof(response.header),
+            nullptr,
+            response.header.nonce,
+            chain_key
+        );
+    }
 
     /* Send the response */
     main_socket.Send((char*)(void*)&response,
@@ -469,13 +472,19 @@ FORCE_INLINE void Server::HandleTransferData(
             Peers::details->Get(package->header.source_ip);
         if (source_peer_details == nullptr) { return; }
 
-        /* Get the package timestamp */
-        uint64_t package_timestamp = package->header.timestamp;
+        /* Get the package sequence number */
+        const int64_t package_sequence_number = package->header.sequence_number;
+
+        /* Check the package for duplicate */
+        if (package_sequence_number -
+            source_peer_details->from_sequence_number < -4) {
+            WARN_LOG("Duplicate message found");
+            return;
+        }
 
         /* Decrypt the package */
         unsigned long long data_size;
-        if (package_timestamp <= source_peer_details->last_timestamp ||
-            crypto_aead_chacha20poly1305_ietf_decrypt(
+        if (crypto_aead_chacha20poly1305_ietf_decrypt(
             (uint8_t*)package->data,
             &data_size,
             nullptr,
@@ -484,7 +493,7 @@ FORCE_INLINE void Server::HandleTransferData(
             (uint8_t*)(void*)&package->header,
             sizeof(package->header),
             package->header.nonce,
-            source_peer_details->chain_key
+            source_peer_details->key
         ) != 0) {
             WARN_LOG("Forged message found");
             return;
@@ -494,8 +503,8 @@ FORCE_INLINE void Server::HandleTransferData(
         if (!equal(source_peer_details->endpoint, from))
             source_peer_details->endpoint = from;
 
-        /* Update the last timestamp */
-        source_peer_details->last_timestamp = package_timestamp;
+        /* Update the last sequence number */
+        source_peer_details->from_sequence_number = package_sequence_number;
 
         /* Get the real destination address */
         destination_netb = ((iphdr*)(void*)package->data)->daddr;
@@ -518,8 +527,8 @@ FORCE_INLINE void Server::HandleTransferData(
 
         /* Update the package header */
         package->UpdateHeader(dest_peer_details->nonce,
-                              destination_netb,
-                              Time::Nanoseconds());
+                              dest_peer_details->to_sequence_number++,
+                              destination_netb);
 
         /* Encrypt the package */
         crypto_aead_chacha20poly1305_ietf_encrypt(
@@ -531,7 +540,7 @@ FORCE_INLINE void Server::HandleTransferData(
             sizeof(package->header),
             nullptr,
             package->header.nonce,
-            dest_peer_details->chain_key
+            dest_peer_details->key
         );
 
         /* Send the encrypted package */
@@ -572,33 +581,39 @@ FORCE_INLINE void Server::HandleKeepAlive(
         Peers::details->Get(package->header.source_ip);
     if (peer_details == nullptr) { return; }
 
-    /* Get the package timestamp */
-    const uint64_t package_timestamp = package->header.timestamp;
+    /* Get the package sequence number */
+    const int64_t package_sequence_number = package->header.sequence_number;
 
-    /* Decrypt the package */
-    unsigned long long data_size;
-    if (package_timestamp <= peer_details->last_timestamp ||
-        crypto_aead_chacha20poly1305_ietf_decrypt(
-        package->poly1305_tag,
-        &data_size,
-        nullptr,
-        package->poly1305_tag,
-        sizeof(package->poly1305_tag),
-        (uint8_t*)(void*)&package->header,
-        sizeof(package->header),
-        package->header.nonce,
-        peer_details->chain_key
-    ) != 0) {
-        WARN_LOG("Forged message found");
+    /* Check the package for duplicate */
+    if (package_sequence_number - peer_details->from_sequence_number < -4) {
+        WARN_LOG("Duplicate message found");
         return;
     }
-    details_lock.unlock();
+
+    /* Decrypt the package */
+    {
+        unsigned long long dummy_len;
+        if (crypto_aead_chacha20poly1305_ietf_decrypt(
+            package->poly1305_tag,
+            &dummy_len,
+            nullptr,
+            package->poly1305_tag,
+            sizeof(package->poly1305_tag),
+            (uint8_t*)(void*)&package->header,
+            sizeof(package->header),
+            package->header.nonce,
+            peer_details->key
+        ) != 0) {
+            WARN_LOG("Forged message found");
+            return;
+        }
+    }
 
     /* Update the endpoint */
     if (!equal(peer_details->endpoint, from)) peer_details->endpoint = from;
 
-    /* Update the last timestamp */
-    peer_details->last_timestamp = package_timestamp;
+    /* Update the last sequence number */
+    peer_details->from_sequence_number = package_sequence_number;
 }
 
 FORCE_INLINE void Server::HandleGetPeerRequest(
@@ -619,33 +634,41 @@ FORCE_INLINE void Server::HandleGetPeerRequest(
     /* Check the endpoint */
     if (!equal(source_peer_details->endpoint, from)) return;
 
-    /* Get the package timestamp */
-    const uint64_t package_timestamp = package->header.timestamp;
+    /* Get the package sequence number */
+    const int64_t package_sequence_number = package->header.sequence_number;
+
+    /* Check the package for duplicate */
+    if (package_sequence_number -
+        source_peer_details->from_sequence_number < -4) {
+        WARN_LOG("Duplicate message found");
+        return;
+    }
 
     /* Decrypt the package */
-    unsigned long long dummy_len;
-    if (package_timestamp <= source_peer_details->last_timestamp ||
-        crypto_aead_chacha20poly1305_ietf_decrypt(
-        (uint8_t*)(void*)&package->data,
-        &dummy_len,
-        nullptr,
-        (uint8_t*)(void*)&package->data,
-        sizeof(package->data) + sizeof(package->poly1305_tag),
-        (uint8_t*)(void*)&package->header,
-        sizeof(package->header),
-        package->header.nonce,
-        source_peer_details->chain_key
-    ) != 0) {
-        WARN_LOG("Forged message found");
-        return;
+    {
+        unsigned long long dummy_len;
+        if (crypto_aead_chacha20poly1305_ietf_decrypt(
+            (uint8_t*)(void*)&package->data,
+            &dummy_len,
+            nullptr,
+            (uint8_t*)(void*)&package->data,
+            sizeof(package->data) + sizeof(package->poly1305_tag),
+            (uint8_t*)(void*)&package->header,
+            sizeof(package->header),
+            package->header.nonce,
+            source_peer_details->key
+        ) != 0) {
+            WARN_LOG("Forged message found");
+            return;
+        }
     }
 
     /* Update the endpoint */
     if (!equal(source_peer_details->endpoint, from))
         source_peer_details->endpoint = from;
 
-    /* Update the last timestamp */
-    source_peer_details->last_timestamp = package_timestamp;
+    /* Update the last sequence number */
+    source_peer_details->from_sequence_number = package_sequence_number;
 
     /* Get the peer local ip */
     uint32_t peer_ip = package->data.requested_peer_ip;
@@ -669,17 +692,20 @@ FORCE_INLINE void Server::HandleGetPeerRequest(
                              requested_peer_details->static_public_key);
 
         /* Encrypt the response */
-        crypto_aead_chacha20poly1305_ietf_encrypt(
-            (uint8_t*)(void*)&response.data,
-            &dummy_len,
-            (uint8_t*)(void*)&response.data,
-            sizeof(response.data),
-            (uint8_t*)(void*)&response.header,
-            sizeof(response.header),
-            nullptr,
-            response.header.nonce,
-            source_peer_details->chain_key
-        );
+        {
+            unsigned long long dummy_len;
+            crypto_aead_chacha20poly1305_ietf_encrypt(
+                (uint8_t*)(void*)&response.data,
+                &dummy_len,
+                (uint8_t*)(void*)&response.data,
+                sizeof(response.data),
+                (uint8_t*)(void*)&response.header,
+                sizeof(response.header),
+                nullptr,
+                response.header.nonce,
+                source_peer_details->key
+            );
+        }
 
         /* Send the response to the client */
         INFO_LOG("Sending the get peer response to the %s:%hu",
@@ -701,17 +727,20 @@ FORCE_INLINE void Server::HandleGetPeerRequest(
                          source_peer_details->static_public_key);
 
         /* Encrypt the response */
-        crypto_aead_chacha20poly1305_ietf_encrypt(
-            (uint8_t*)(void*)&response.data,
-            &dummy_len,
-            (uint8_t*)(void*)&response.data,
-            sizeof(response.data),
-            (uint8_t*)(void*)&response.header,
-            sizeof(response.header),
-            nullptr,
-            response.header.nonce,
-            requested_peer_details->chain_key
-        );
+        {
+            unsigned long long dummy_len;
+            crypto_aead_chacha20poly1305_ietf_encrypt(
+                (uint8_t*)(void*)&response.data,
+                &dummy_len,
+                (uint8_t*)(void*)&response.data,
+                sizeof(response.data),
+                (uint8_t*)(void*)&response.header,
+                sizeof(response.header),
+                nullptr,
+                response.header.nonce,
+                requested_peer_details->key
+            );
+        }
 
         /* Send the response to the client */
         const sockaddr_in& requested_peer = requested_peer_details->endpoint;

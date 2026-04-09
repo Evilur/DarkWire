@@ -12,17 +12,18 @@ struct KeepAlive final {
     struct {
         PackageType type;
         uint8_t nonce[crypto_aead_chacha20poly1305_NPUBBYTES];
+        int64_t sequence_number;
         uint32_t source_ip;
-        uint64_t timestamp;
     } header;
     uint8_t poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
-    explicit KeepAlive(Nonce* nonce, uint64_t timestamp) noexcept;
+    explicit KeepAlive(Nonce* nonce,
+                       int64_t sequence_number) noexcept;
 };
 #pragma pack(pop)
 
 FORCE_INLINE KeepAlive::KeepAlive(Nonce* const nonce,
-                                  const uint64_t timestamp) noexcept {
+                                  const int64_t sequence_number) noexcept {
     /* Set the package */
     header.type = KEEPALIVE;
 
@@ -32,6 +33,6 @@ FORCE_INLINE KeepAlive::KeepAlive(Nonce* const nonce,
     /* Set the source ip */
     header.source_ip = local_ip.Netb();
 
-    /* Set the timestamp */
-    header.timestamp = timestamp;
+    /* Set the sequence number */
+    header.sequence_number = sequence_number;
 }

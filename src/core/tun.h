@@ -190,13 +190,12 @@ FORCE_INLINE void TUN::Up() noexcept {
         System::Exec(command);
 
     /* Set up the interface */
-    in_addr addr { local_ip.Netb() };
     System::Exec(
         String::Format(
             "netsh interface ipv4 set address name=\"%s\" "
             "source=static address=%s/%hhu gateway=none store=active",
             _tun_name.CStr(),
-            inet_ntoa(addr),
+            inet_ntoa({ local_ip.Netb() }),
             netmask
         )
     );
@@ -304,9 +303,8 @@ FORCE_INLINE void TUN::Up() noexcept {
         System::Exec(command);
 
     /* Up the interface */
-    in_addr addr { local_ip.Netb() };
     System::Exec(String::Format("ip addr add %s/%hhu dev %s",
-                                inet_ntoa(addr),
+                                inet_ntoa({ local_ip.Netb() }),
                                 netmask,
                                 _tun_name.CStr()));
     System::Exec(String::Format("ip link set %s mtu %d",

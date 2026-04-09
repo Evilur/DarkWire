@@ -21,11 +21,9 @@ struct GetPeerResponse final {
     } data;
     uint8_t poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
-    GetPeerResponse(Nonce* nonce,
-                    uint32_t peer_ip) noexcept;
+    GetPeerResponse(Nonce* nonce, uint32_t peer_ip) noexcept;
 
-    void SetData(const sockaddr_in& endpoint,
-                 uint8_t* public_key) noexcept;
+    void SetData(const sockaddr_in& endpoint, uint8_t* public_key) noexcept;
 };
 #pragma pack(pop)
 

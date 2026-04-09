@@ -21,9 +21,9 @@
 #include "util/equal.h"
 #include "util/hkdf.h"
 #include "util/logger.h"
+#include "util/time.h"
 
 #include <cstring>
-#include <ctime>
 #include <shared_mutex>
 #include <sodium.h>
 #include <thread>
@@ -62,21 +62,23 @@ private:
 
     struct Peers final {
         struct Details final {
-            sockaddr_in endpoint;
-            uint64_t last_from_package_timestamp;
-            uint64_t last_to_package_timestamp;
-            uint64_t next_handshake_timestamp;
-            uint8_t key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
-            uint8_t public_static_key[crypto_scalarmult_BYTES];
             UniqPtr<Nonce> nonce;
+            sockaddr_in endpoint;
+            uint64_t last_to_package_timestamp;
+            uint64_t last_handshake_timestamp;
+            uint64_t next_handshake_timestamp;
+            int64_t from_sequence_number;
+            int64_t to_sequence_number;
+            uint8_t public_static_key[crypto_scalarmult_BYTES];
+            uint8_t key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
         } __attribute__((aligned(128)));
 
         struct TempDetails final {
+            UniqPtr<Nonce> nonce = nullptr;
+            UniqPtr<Keys> ephemeral_keys = nullptr;
             sockaddr_in endpoint;
             uint8_t public_static_key[crypto_scalarmult_BYTES];
             uint8_t chain_key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
-            UniqPtr<Nonce> nonce = nullptr;
-            UniqPtr<Keys> ephemeral_keys = nullptr;
             bool waiting_get_peer;
             bool waiting_handshake_response;
             bool waiting_nat_probe;
@@ -90,8 +92,7 @@ private:
         static inline std::shared_mutex temp_details_mutex;
     };
 
-    static inline uint64_t _next_handshake_timestamp =
-        (uint64_t)std::time(nullptr);
+    static inline uint64_t _next_handshake_timestamp = Time::Now();
 
     static void HandleHandshakeResponse(
         HandshakeResponse* package,
@@ -176,12 +177,16 @@ FORCE_INLINE void Client::RunHandshakeLoop() {
     /* Send a handshake request */
     for (;;) {
         /* Check the timestamp */
-        const uint64_t current_time = std::time(nullptr);
-        if (current_time < _next_handshake_timestamp) {
-            usleep((uint32_t)(_next_handshake_timestamp - current_time)
-                   * 1'000'000);
-            continue;
+        {
+            const uint64_t timestamp = Time::Now();
+            if (timestamp < _next_handshake_timestamp) {
+                Time::WaitUntil(_next_handshake_timestamp);
+                continue;
+            }
         }
+
+        /* Get the current timestamp */
+        const uint64_t timestamp = Time::Now();
 
         /* Lock the server */
         std::lock_guard server_lock(Server::mutex);
@@ -194,8 +199,9 @@ FORCE_INLINE void Client::RunHandshakeLoop() {
         Server::nonce = new Nonce();
 
         /* Fill the request */
-        HandshakeRequest request(Server::ephemeral_keys->Public(),
-                                 Server::nonce);
+        HandshakeRequest request(Server::nonce,
+                                 Server::ephemeral_keys->Public(),
+                                 timestamp);
 
         /* Compute the first shared secret */
         uint8_t shared[crypto_scalarmult_BYTES];
@@ -211,18 +217,20 @@ FORCE_INLINE void Client::RunHandshakeLoop() {
         hkdf(Server::chain_key, nullptr, shared);
 
         /* Crypt the data */
-        unsigned long long dummy_len;
-        crypto_aead_chacha20poly1305_ietf_encrypt(
-            (uint8_t*)(void*)&request.data,
-            &dummy_len,
-            (uint8_t*)(void*)&request.data,
-            sizeof(request.data),
-            (uint8_t*)(void*)&request.header,
-            sizeof(request.header),
-            nullptr,
-            request.header.nonce,
-            Server::chain_key
-        );
+        {
+            unsigned long long dummy_len;
+            crypto_aead_chacha20poly1305_ietf_encrypt(
+                (uint8_t*)(void*)&request.data,
+                &dummy_len,
+                (uint8_t*)(void*)&request.data,
+                sizeof(request.data),
+                (uint8_t*)(void*)&request.header,
+                sizeof(request.header),
+                nullptr,
+                request.header.nonce,
+                Server::chain_key
+            );
+        }
 
         /* Send the encrypted message */
         main_socket.Send((char*)(void*)&request,
@@ -230,7 +238,7 @@ FORCE_INLINE void Client::RunHandshakeLoop() {
                          Server::endpoint);
 
         /* Set the next handshake time */
-        _next_handshake_timestamp = current_time + 6;
+        _next_handshake_timestamp = timestamp + 6;
     }
 }
 
@@ -292,7 +300,8 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
     void (*const send_keepalive)(Peers::Details*, uint64_t timestamp) =
         [](Peers::Details* const peer_details, const uint64_t timestamp) {
         /* Assemble the package */
-        KeepAlive package(peer_details->nonce, timestamp);
+        KeepAlive package(peer_details->nonce,
+                          peer_details->to_sequence_number++);
 
         /* Sign the package */
         {
@@ -320,22 +329,21 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
     };
 
     /* Send keep-alives every 10 seconds */
-    constexpr uint64_t keepalive = 10 * 1'000'000'000ULL;
-    uint64_t next_keepalive_timestamp = Time::Nanoseconds() + keepalive;
+    constexpr uint64_t keepalive = 10;
+    uint64_t next_keepalive_timestamp = Time::Now() + keepalive;
     for (;;) {
         /* Wait for the next keep-alive timestamp */
-        Time::NanoWaitUntil(next_keepalive_timestamp);
+        Time::WaitUntil(next_keepalive_timestamp);
 
         /* Get the current timestamp */
-        const uint64_t timestamp = Time::Nanoseconds();
+        const uint64_t timestamp = Time::Now();
 
         /* Get the server's details */
         std::shared_lock details_lock(Peers::details_mutex);
         Peers::Details* const server_details =
             Peers::details->Get(Server::local_ip);
         if (server_details == nullptr) {
-            next_keepalive_timestamp =
-                timestamp + (6 * 1'000'000'000ULL);
+            next_keepalive_timestamp = timestamp + 6;
             continue;
         }
 
@@ -378,7 +386,7 @@ FORCE_INLINE void Client::HandleTunPackage(TransferData& package,
                                            uint32_t destination_ip)
 noexcept {
     /* Get the current timestamp */
-    const uint64_t timestamp = Time::Nanoseconds();
+    const uint64_t timestamp = Time::Now();
 
     /* Try to get the details from the peers list */
     std::shared_lock details_lock(Peers::details_mutex);
@@ -408,7 +416,9 @@ noexcept {
     peer_details->last_to_package_timestamp = timestamp;
 
     /* Update the package header */
-    package.UpdateHeader(peer_details->nonce, destination_ip, timestamp);
+    package.UpdateHeader(peer_details->nonce,
+                         peer_details->to_sequence_number++,
+                         destination_ip);
 
     /* Encrypt the package */
     unsigned long long data_size;
@@ -463,24 +473,26 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
     hkdf(Server::chain_key, Server::chain_key, shared);
 
     /* Decrypt the data */
-    unsigned long long dummy_len;
-    if (crypto_aead_chacha20poly1305_ietf_decrypt(
-        (uint8_t*)(void*)&package->data,
-        &dummy_len,
-        nullptr,
-        (uint8_t*)(void*)&package->data,
-        sizeof(package->data) + sizeof(package->poly1305_tag),
-        (uint8_t*)(void*)&package->header,
-        sizeof(package->header),
-        package->header.nonce,
-        Server::chain_key
-    ) != 0) {
-        WARN_LOG("Forged message found");
-        return;
-    };
+    {
+        unsigned long long dummy_len;
+        if (crypto_aead_chacha20poly1305_ietf_decrypt(
+            (uint8_t*)(void*)&package->data,
+            &dummy_len,
+            nullptr,
+            (uint8_t*)(void*)&package->data,
+            sizeof(package->data) + sizeof(package->poly1305_tag),
+            (uint8_t*)(void*)&package->header,
+            sizeof(package->header),
+            package->header.nonce,
+            Server::chain_key
+        ) != 0) {
+            WARN_LOG("Forged message found");
+            return;
+        };
+    }
 
     /* Save the server's local ip */
-    Server::local_ip = package->data.server_local_ip;
+    Server::local_ip = package->data.server_ip;
 
     /* Add the server to the peers list */
     {
@@ -493,18 +505,22 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
         if (server_details == nullptr) {
             /* Assemble the new details */
             Peers::Details details = {
+                .nonce = Server::nonce.Get(),
                 .endpoint = Server::endpoint,
-                .nonce = Server::nonce.Get()
+                .from_sequence_number = 0,
+                .to_sequence_number = 0
             };
             memcpy(details.key, Server::chain_key,
                    crypto_aead_chacha20poly1305_ietf_KEYBYTES);
 
             /* Put the new data to the dictionary */
-            Peers::details->Put(package->data.server_local_ip,
+            Peers::details->Put(package->data.server_ip,
                                 std::move(details));
         /* Otherwise, update the existing details */
         } else {
             server_details->nonce = Server::nonce.Get();
+            server_details->from_sequence_number = 0;
+            server_details->to_sequence_number = 0;
             memcpy(server_details->key, Server::chain_key,
                    crypto_aead_chacha20poly1305_ietf_KEYBYTES);
         }
@@ -528,7 +544,7 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
 
     /* If all is OK, next handshake will be after 3 minutes */
     INFO_LOG("The handshake response has been successfully handled");
-    _next_handshake_timestamp = (uint64_t)std::time(nullptr) + 180;
+    _next_handshake_timestamp = Time::Now() + 180;
 }
 
 FORCE_INLINE void Client::HandleTransferData(
@@ -542,15 +558,15 @@ FORCE_INLINE void Client::HandleTransferData(
 
     /* Get the key pointer */
     std::shared_lock details_lock(Peers::details_mutex);
-    Peers::Details* const peers_details =
+    Peers::Details* const peer_details =
         Peers::details->Get(package->header.source_ip);
-    if (peers_details == nullptr) { return; }
+    if (peer_details == nullptr) { return; }
 
-    /* Get the package timestamp */
-    const uint64_t package_timestamp = package->header.timestamp;
+    /* Get the package sequence number */
+    const int64_t package_sequence_number = package->header.sequence_number;
 
     /* Check the package for duplicate */
-    if (package_timestamp <= peers_details->last_from_package_timestamp) {
+    if (package_sequence_number - peer_details->from_sequence_number < -4) {
         WARN_LOG("Duplicate message found");
         return;
     }
@@ -566,14 +582,14 @@ FORCE_INLINE void Client::HandleTransferData(
         (uint8_t*)(void*)&package->header,
         sizeof(package->header),
         package->header.nonce,
-        peers_details->key
+        peer_details->key
     ) != 0) {
         WARN_LOG("Forged message found");
         return;
     }
 
-    /* If all is OK, update the timestamp */
-    peers_details->last_from_package_timestamp = package_timestamp;
+    /* If all is OK, update the sequence number */
+    peer_details->from_sequence_number = package_sequence_number;
 
     /* Write the package to the tun */
     tun->Write(package->data, (uint32_t)data_size);
@@ -631,9 +647,9 @@ FORCE_INLINE void Client::HandleGetPeerResponse(
     if (peer_temp_details == nullptr) {
         /* Put the new details to the dictionary */
         Peers::TempDetails new_details = {
-            .endpoint = new_endpoint,
             .nonce = nullptr,
             .ephemeral_keys = nullptr,
+            .endpoint = new_endpoint,
             .waiting_get_peer = false,
             .waiting_handshake_response = false
         };
@@ -684,19 +700,18 @@ FORCE_INLINE void Client::HandleP2PHandshakeRequest(
     if (peer_details == nullptr && peer_temp_details == nullptr) return;
 
     /* Get the current timestamp and the package one */
-    const uint64_t timestamp = Time::Nanoseconds();
+    const uint64_t timestamp = Time::Now();
     const uint64_t package_timestamp = package->header.timestamp;
 
     /* Check the package timestamps delta */
-    if (Time::Delta(package_timestamp, timestamp) >
-        180 * 1'000'000'000ULL) {
+    if (Time::Delta(package_timestamp, timestamp) > 120) {
         WARN_LOG("Invalid timestamp found");
         return;
     }
 
-    /* Compare the last peer timestamp and the package timestamp */
+    /* Check the package for duplicate */
     if (peer_details != nullptr &&
-        package_timestamp <= peer_details->last_from_package_timestamp) {
+        package_timestamp <= peer_details->last_handshake_timestamp) {
         WARN_LOG("Duplicate message found");
         return;
     }
@@ -718,21 +733,23 @@ FORCE_INLINE void Client::HandleP2PHandshakeRequest(
     hkdf(chain_key, nullptr, shared);
 
     /* Check the package sign */
-    unsigned long long dummy_len;
-    if (crypto_aead_chacha20poly1305_ietf_decrypt(
-        package->poly1305_tag,
-        &dummy_len,
-        nullptr,
-        package->poly1305_tag,
-        sizeof(package->poly1305_tag),
-        (uint8_t*)(void*)&package->header,
-        sizeof(package->header),
-        package->header.nonce,
-        chain_key
-    ) != 0) {
-        WARN_LOG("Forged message found");
-        return;
-    };
+    {
+        unsigned long long dummy_len;
+        if (crypto_aead_chacha20poly1305_ietf_decrypt(
+            package->poly1305_tag,
+            &dummy_len,
+            nullptr,
+            package->poly1305_tag,
+            sizeof(package->poly1305_tag),
+            (uint8_t*)(void*)&package->header,
+            sizeof(package->header),
+            package->header.nonce,
+            chain_key
+        ) != 0) {
+            WARN_LOG("Forged message found");
+            return;
+        };
+    }
 
     /* Save the current peer */
     if (peer_details == nullptr) {
@@ -745,9 +762,11 @@ FORCE_INLINE void Client::HandleP2PHandshakeRequest(
 
         /* If all is OK */
         Peers::details->Put(peer_ip, {
+            .nonce = new Nonce(package->header.nonce),
             .endpoint = peer_temp_details->endpoint,
-            .last_from_package_timestamp = package->header.timestamp,
-            .nonce = new Nonce(package->header.nonce)
+            .last_handshake_timestamp = package_timestamp,
+            .from_sequence_number = 0,
+            .to_sequence_number = 0
         });
 
         /* Update the peer details */
@@ -763,9 +782,10 @@ FORCE_INLINE void Client::HandleP2PHandshakeRequest(
                    peer_temp_details->public_static_key,
                    crypto_scalarmult_BYTES);
         }
-        peer_details->last_from_package_timestamp =
-            package->header.timestamp;
         peer_details->nonce = new Nonce(package->header.nonce);
+        peer_details->last_handshake_timestamp = package_timestamp;
+        peer_details->from_sequence_number = 0;
+        peer_details->to_sequence_number = 0;
     }
 
     /* Generate the ephemeral keys pair */
@@ -867,19 +887,18 @@ FORCE_INLINE void Client::HandleP2PHandshakeResponse(
     Peers::Details* peer_details = Peers::details->Get(peer_ip);
 
     /* Get the current timestamp and the package one */
-    const uint64_t timestamp = Time::Nanoseconds();
+    const uint64_t timestamp = Time::Now();
     const uint64_t package_timestamp = package->header.timestamp;
 
     /* Check the package timestamp */
-    if (Time::Delta(package_timestamp, timestamp) >
-        180 * 1'000'000'000ULL) {
+    if (Time::Delta(package_timestamp, timestamp) > 120) {
         WARN_LOG("Invalid timestamp found");
         return;
     }
 
-    /* Compare the last peer timestamp and the package timestamp */
+    /* Check the package for duplicate */
     if (peer_details != nullptr &&
-        package_timestamp <= peer_details->last_from_package_timestamp) {
+        package_timestamp <= peer_details->last_handshake_timestamp) {
         WARN_LOG("Duplicate message found");
         return;
     }
@@ -933,10 +952,12 @@ FORCE_INLINE void Client::HandleP2PHandshakeResponse(
     /* Save the peer to the permanent details dict */
     if (peer_details == nullptr) {
         Peers::Details new_details = {
+            .nonce = peer_temp_details->nonce.Get(),
             .endpoint = peer_temp_details->endpoint,
-            .last_from_package_timestamp = package_timestamp,
-            .next_handshake_timestamp = timestamp + (180 * 1'000'000'000ULL),
-            .nonce = peer_temp_details->nonce.Get()
+            .last_handshake_timestamp = package_timestamp,
+            .next_handshake_timestamp = timestamp + 180,
+            .from_sequence_number = 0,
+            .to_sequence_number = 0
         };
         memcpy(new_details.key,
                chain_key,
@@ -949,10 +970,12 @@ FORCE_INLINE void Client::HandleP2PHandshakeResponse(
     /* If it is already exists, just update the fields */
     } else {
         *peer_details = {
+            .nonce = peer_temp_details->nonce.Get(),
             .endpoint = peer_temp_details->endpoint,
-            .last_from_package_timestamp = package_timestamp,
-            .next_handshake_timestamp = timestamp + (180 * 1'000'000'000ULL),
-            .nonce = peer_temp_details->nonce.Get()
+            .last_handshake_timestamp = package_timestamp,
+            .next_handshake_timestamp = timestamp + 180,
+            .from_sequence_number = 0,
+            .to_sequence_number = 0
         };
         memcpy(peer_details->key,
                chain_key,
@@ -993,26 +1016,21 @@ FORCE_INLINE void Client::HandleNatProbeRequest(
     /* Get the peer ip from the package */
     const uint32_t peer_ip = package->header.source_ip;
 
-    /* Get the current timestamp and the package one */
-    const uint64_t timestamp = Time::Nanoseconds();
-    const uint64_t package_timestamp = package->header.timestamp;
-
     /* Try to get the peer details */
     std::shared_lock details_lock(Peers::details_mutex);
-    Peers::Details* const peer_details =
-        Peers::details->Get(peer_ip);
-    if (peer_details == nullptr) return;
-
-
-    /* Check the package timestamp */
-    if (Time::Delta(package_timestamp, timestamp) >
-        180 * 1'000'000'000ULL) {
-        WARN_LOG("Invalid timestamp found");
+    Peers::Details* const peer_details = Peers::details->Get(peer_ip);
+    if (peer_details == nullptr) {
+        TRACE_LOG("Failed to handle the nat probe response from the %s peer: "
+                  "have not enough infomation",
+                  inet_ntoa({ peer_ip }));
         return;
     }
 
-    /* Compare the last peer timestamp and the package timestamp */
-    if (package_timestamp <= peer_details->last_from_package_timestamp) {
+    /* Get the package sequence number */
+    const int64_t package_sequence_number = package->header.sequence_number;
+
+    /* Check the package for duplicate */
+    if (package_sequence_number - peer_details->from_sequence_number < -4) {
         WARN_LOG("Duplicate message found");
         return;
     }
@@ -1037,7 +1055,9 @@ FORCE_INLINE void Client::HandleNatProbeRequest(
     }
 
     /* Assemble the response */
-    NatProbeResponse response(peer_details->nonce, peer_ip, timestamp);
+    NatProbeResponse response(peer_details->nonce,
+                              peer_details->to_sequence_number++,
+                              peer_ip);
 
     /* Sign the response package */
     {
@@ -1075,10 +1095,6 @@ FORCE_INLINE void Client::HandleNatProbeResponse(
     /* Get the peer ip from the package */
     const uint32_t peer_ip = package->header.source_ip;
 
-    /* Get the current timestamp and the package one */
-    const uint64_t timestamp = Time::Nanoseconds();
-    const uint64_t package_timestamp = package->header.timestamp;
-
     /* Try to get the peer temp details */
     std::unique_lock temp_details_lock(Peers::temp_details_mutex);
     Peers::TempDetails* const peer_temp_details =
@@ -1101,16 +1117,11 @@ FORCE_INLINE void Client::HandleNatProbeResponse(
         return;
     }
 
-    /* Check the package timestamp */
-    if (Time::Delta(package_timestamp, timestamp) >
-        180 * 1'000'000'000ULL) {
-        WARN_LOG("Invalid timestamp found");
-        return;
-    }
+    /* Get the package sequence number */
+    const int64_t package_sequence_number = package->header.sequence_number;
 
-    /* Compare the last peer timestamp and the package timestamp */
-    if (peer_details != nullptr &&
-        package_timestamp <= peer_details->last_from_package_timestamp) {
+    /* Check the package for duplicate */
+    if (package_sequence_number - peer_details->from_sequence_number < -4) {
         WARN_LOG("Duplicate message found");
         return;
     }
@@ -1160,9 +1171,10 @@ noexcept {
         std::shared_lock details_lock(Peers::details_mutex);
         Peers::Details* server_details =
             Peers::details->Get(Server::local_ip);
-        if (server_details == nullptr) { usleep(6 * 1'000'000); continue; }
-        GetPeerRequest package(server_details->nonce, peer_ip);
-        details_lock.unlock();
+        if (server_details == nullptr) { Time::Sleep(6); continue; }
+        GetPeerRequest package(server_details->nonce,
+                               server_details->to_sequence_number++,
+                               peer_ip);
 
         /* Encrypt the package */
         {
@@ -1179,17 +1191,18 @@ noexcept {
                 package.header.nonce,
                 Server::chain_key
             );
-
-            /* Send the package to the server */
-            INFO_LOG("Sending the get '%s' peer package",
-                     inet_ntoa({ peer_ip }));
-            main_socket.Send((char*)(void*)&package,
-                             sizeof(package),
-                             Server::endpoint);
         }
 
+        /* Send the package to the server */
+        INFO_LOG("Sending the get '%s' peer package",
+                 inet_ntoa({ peer_ip }));
+        main_socket.Send((char*)(void*)&package,
+                         sizeof(package),
+                         Server::endpoint);
+
         /* Wait for 6 seconds */
-        usleep(6 * 1'000'000);
+        details_lock.unlock();
+        Time::Sleep(6);
 
         /* Get the temp details */
         temp_details_lock.lock();
@@ -1221,7 +1234,7 @@ void Client::SendP2PHandshakeRequest(const uint32_t peer_ip,
                  nat_probe ? " via the server" : "");
 
         /* Get the current timestamp */
-        const uint64_t timestamp = Time::Nanoseconds();
+        const uint64_t timestamp = Time::Now();
 
         /* Generate ephemeral keys pair */
         const Keys* const ephemeral_keys =
@@ -1284,7 +1297,7 @@ void Client::SendP2PHandshakeRequest(const uint32_t peer_ip,
 
         /* Wait for 6 seconds */
         temp_details_lock.unlock();
-        usleep(6 * 1'000'000);
+        Time::Sleep(6);
         temp_details_lock.lock();
     }
 
@@ -1315,10 +1328,11 @@ FORCE_INLINE void Client::NatProbe(const uint32_t peer_ip,
         if (equal(peer_details->endpoint, real_endpoint)) return;
 
         /* Get the current timestamp */
-        const uint64_t timestamp = Time::Nanoseconds();
+        const uint64_t timestamp = Time::Now();
 
         /* Assemble the nat probe request package */
-        NatProbeRequest package(peer_details->nonce, peer_ip, timestamp);
+        NatProbeRequest package(peer_details->nonce,
+                                peer_details->to_sequence_number++);
 
         /* Sign the package */
         {
@@ -1348,7 +1362,7 @@ FORCE_INLINE void Client::NatProbe(const uint32_t peer_ip,
     }
 
     /* Wait for 6 seconds */
-    usleep(6 * 1'000'000);
+    Time::Sleep(6);
 
     /* Try to delete the temp details entry */
     std::unique_lock temp_details_lock(Peers::temp_details_mutex);

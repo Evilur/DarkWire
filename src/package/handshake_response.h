@@ -11,26 +11,26 @@
 struct HandshakeResponse final {
     struct {
         PackageType type;
-        uint8_t ephemeral_public_key[crypto_scalarmult_BYTES];
         uint8_t nonce[crypto_aead_chacha20poly1305_ietf_NPUBBYTES];
+        uint8_t ephemeral_public_key[crypto_scalarmult_BYTES];
     } header;
     struct {
         uint32_t local_ip;
         uint8_t netmask;
-        uint32_t server_local_ip;
+        uint32_t server_ip;
     } data;
     uint8_t poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
-    HandshakeResponse(const uint8_t* epk,
-                      Nonce* nonce,
+    HandshakeResponse(Nonce* nonce,
+                      const uint8_t* epk,
                       uint32_t response_local_ip,
                       uint8_t response_netmask) noexcept;
 };
 #pragma pack(pop)
 
 FORCE_INLINE HandshakeResponse::HandshakeResponse(
-    const uint8_t* const epk,
     Nonce* const nonce,
+    const uint8_t* const epk,
     const uint32_t response_local_ip,
     const uint8_t response_netmask
 ) noexcept {
@@ -48,5 +48,5 @@ FORCE_INLINE HandshakeResponse::HandshakeResponse(
     data.netmask = response_netmask;
 
     /* Set the server's local ip */
-    data.server_local_ip = local_ip.Netb();
+    data.server_ip = local_ip.Netb();
 }
