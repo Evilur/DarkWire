@@ -53,25 +53,61 @@ private:
     WINTUN_SESSION_HANDLE _session = nullptr;
 
     using PFN_WintunCreateAdapter =
-        WINTUN_ADAPTER_HANDLE(WINAPI*)(LPCWSTR, LPCWSTR, LPCWSTR);
+        WINTUN_ADAPTER_HANDLE (WINAPI*)(
+            LPCWSTR Name,
+            LPCWSTR TunnelType,
+            const GUID* RequestedGUID
+        );
+
     using PFN_WintunOpenAdapter =
-        WINTUN_ADAPTER_HANDLE(WINAPI*)(LPCWSTR, LPCWSTR);
-    using PFN_WintunStartSession =
-        WINTUN_SESSION_HANDLE(WINAPI*)(WINTUN_ADAPTER_HANDLE, DWORD);
-    using PFN_WintunEndSession =
-        void(WINAPI*)(WINTUN_SESSION_HANDLE);
+        WINTUN_ADAPTER_HANDLE (WINAPI*)(
+            LPCWSTR Name
+        );
+
     using PFN_WintunCloseAdapter =
-        void(WINAPI*)(WINTUN_ADAPTER_HANDLE);
-    using PFN_WintunAllocateSendPacket =
-        BYTE*(WINAPI*)(WINTUN_SESSION_HANDLE, DWORD);
-    using PFN_WintunSendPacket =
-        void(WINAPI*)(WINTUN_SESSION_HANDLE, BYTE*);
-    using PFN_WintunReceivePacket =
-        BYTE*(WINAPI*)(WINTUN_SESSION_HANDLE, DWORD*);
-    using PFN_WintunReleaseReceivePacket =
-        void(WINAPI*)(WINTUN_SESSION_HANDLE, BYTE*);
+        void (WINAPI*)(
+            WINTUN_ADAPTER_HANDLE Adapter
+        );
+
+    using PFN_WintunStartSession =
+        WINTUN_SESSION_HANDLE (WINAPI*)(
+            WINTUN_ADAPTER_HANDLE Adapter,
+            DWORD Capacity
+        );
+
+    using PFN_WintunEndSession =
+        void (WINAPI*)(
+            WINTUN_SESSION_HANDLE Session
+        );
+
     using PFN_WintunGetReadWaitEvent =
-        HANDLE(WINAPI*)(WINTUN_SESSION_HANDLE);
+        HANDLE (WINAPI*)(
+            WINTUN_SESSION_HANDLE Session
+        );
+
+    using PFN_WintunReceivePacket =
+        BYTE* (WINAPI*)(
+            WINTUN_SESSION_HANDLE Session,
+            DWORD* PacketSize
+        );
+
+    using PFN_WintunReleaseReceivePacket =
+        void (WINAPI*)(
+            WINTUN_SESSION_HANDLE Session,
+            BYTE* Packet
+        );
+
+    using PFN_WintunAllocateSendPacket =
+        BYTE* (WINAPI*)(
+            WINTUN_SESSION_HANDLE Session,
+            DWORD PacketSize
+        );
+
+    using PFN_WintunSendPacket =
+        void (WINAPI*)(
+            WINTUN_SESSION_HANDLE Session,
+            BYTE* Packet
+        );
 
     inline static HMODULE hWintun = LoadLibrary("wintun.dll");
     inline static PFN_WintunCreateAdapter WintunCreateAdapter =
@@ -117,15 +153,17 @@ private:
 
 #ifdef _WIN32
 FORCE_INLINE TUN::TUN(const char* const name) : _tun_name(name) {
+    /* Check for .dll import */
+    if (hWintun == nullptr) throw TunError("Failed to load wintun.dll");
     /* Try to create a fresh adapter. If it already exists, open it */
     const std::wstring wide_name = Utf8ToWide(name);
     _adapter = WintunCreateAdapter(L"Wintun", wide_name.c_str(), nullptr);
     if (_adapter == nullptr)
-        _adapter = WintunOpenAdapter(L"Wintun", wide_name.c_str());
+        _adapter = WintunOpenAdapter(wide_name.c_str());
     if (_adapter == nullptr)
         throw TunError("Failed to create/open the Wintun adapter");
 
-    /* Create a seccion */
+    /* Create a session */
     _session = WintunStartSession(_adapter, 0x400000);
     if (_session == nullptr) {
         WintunCloseAdapter(_adapter);
@@ -152,12 +190,13 @@ FORCE_INLINE void TUN::Up() noexcept {
         System::Exec(command);
 
     /* Set up the interface */
+    in_addr addr { .s_addr = local_ip.Netb() };
     System::Exec(
         String::Format(
             "netsh interface ipv4 set address name=\"%s\" "
             "source=static address=%s/%hhu gateway=none store=active",
             _tun_name.CStr(),
-            inet_ntoa({ local_ip.Netb() }),
+            inet_ntoa(addr),
             netmask
         )
     );
@@ -261,8 +300,9 @@ FORCE_INLINE void TUN::Up() noexcept {
         System::Exec(command);
 
     /* Up the interface */
+    in_addr addr { .s_addr = local_ip.Netb() };
     System::Exec(String::Format("ip addr add %s/%hhu dev %s",
-                                inet_ntoa({ local_ip.Netb() }),
+                                inet_ntoa(addr),
                                 netmask,
                                 _tun_name.CStr()));
     System::Exec(String::Format("ip link set %s mtu %d",
