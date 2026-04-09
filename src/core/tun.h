@@ -288,8 +288,12 @@ FORCE_INLINE TUN::TUN(const char* const name) : _tun_name(name),
     }
 
     /* IF all is OK */
-    System::Exec(String::Format("sysctl -w net.ipv6.conf.%s.disable_ipv6=1",
-                                name));
+    System::Exec(
+        String::Format(
+            "sysctl -w net.ipv6.conf.%s.disable_ipv6=1 2>/dev/null",
+            name
+        )
+    );
 }
 
 FORCE_INLINE TUN::~TUN() noexcept { close(_tun_fd); }
