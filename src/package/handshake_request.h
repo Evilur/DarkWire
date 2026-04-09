@@ -28,6 +28,8 @@ struct HandshakeRequest final {
 };
 #pragma pack(pop)
 
+static_assert(sizeof(HandshakeRequest) == 106, "Invalid struct packing");
+
 FORCE_INLINE HandshakeRequest::HandshakeRequest(Nonce* const nonce,
                                                 const uint8_t* const epk,
                                                 const uint64_t timestamp)

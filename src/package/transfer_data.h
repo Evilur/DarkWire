@@ -27,6 +27,8 @@ struct TransferData final {
 };
 #pragma pack(pop)
 
+static_assert(sizeof(TransferData) == 1500, "Invalid struct packing");
+
 FORCE_INLINE TransferData::TransferData() noexcept {
     header.type = TRANSFER_DATA;
 }

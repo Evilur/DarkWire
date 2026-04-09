@@ -24,6 +24,8 @@ struct NatProbeResponse final {
 };
 #pragma pack(pop)
 
+static_assert(sizeof(NatProbeResponse) == 45, "Invalid struct packing");
+
 FORCE_INLINE NatProbeResponse::NatProbeResponse(
     Nonce* const nonce,
     const int64_t sequence_number,

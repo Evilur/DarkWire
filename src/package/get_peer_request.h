@@ -26,6 +26,8 @@ struct GetPeerRequest final {
 };
 #pragma pack(pop)
 
+static_assert(sizeof(GetPeerRequest) == 45, "Invalid struct packing");
+
 FORCE_INLINE GetPeerRequest::GetPeerRequest(Nonce* const nonce,
                                             const int64_t sequnece_number,
                                             const uint32_t peer_ip) noexcept {

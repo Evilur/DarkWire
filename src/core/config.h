@@ -1,6 +1,5 @@
 #pragma once
 
-#include "package/transfer_data.h"
 #include "type/linked_list.h"
 #include "type/string.h"
 #include "util/class.h"

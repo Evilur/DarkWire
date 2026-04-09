@@ -27,6 +27,8 @@ struct GetPeerResponse final {
 };
 #pragma pack(pop)
 
+static_assert(sizeof(GetPeerResponse) == 71, "Invalid struct packing");
+
 FORCE_INLINE
 GetPeerResponse::GetPeerResponse(Nonce* const nonce,
                                  const uint32_t peer_ip) noexcept {

@@ -28,6 +28,8 @@ struct HandshakeResponse final {
 };
 #pragma pack(pop)
 
+static_assert(sizeof(HandshakeResponse) == 70, "Invalid struct packing");
+
 FORCE_INLINE HandshakeResponse::HandshakeResponse(
     Nonce* const nonce,
     const uint8_t* const epk,

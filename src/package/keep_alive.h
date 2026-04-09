@@ -22,6 +22,8 @@ struct KeepAlive final {
 };
 #pragma pack(pop)
 
+static_assert(sizeof(KeepAlive) == 37, "Invalid struct packing");
+
 FORCE_INLINE KeepAlive::KeepAlive(Nonce* const nonce,
                                   const int64_t sequence_number) noexcept {
     /* Set the package */

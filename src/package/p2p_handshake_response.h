@@ -27,6 +27,8 @@ struct P2PHandshakeResponse final {
 };
 #pragma pack(pop)
 
+static_assert(sizeof(P2PHandshakeResponse) == 78, "Invalid struct packing");
+
 FORCE_INLINE
 P2PHandshakeResponse::P2PHandshakeResponse(Nonce* nonce,
                                            const uint8_t* ephemeral_public_key,

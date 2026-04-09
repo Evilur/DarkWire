@@ -22,6 +22,8 @@ struct NatProbeRequest final {
 };
 #pragma pack(pop)
 
+static_assert(sizeof(NatProbeRequest) == 41, "Invalid struct packing");
+
 FORCE_INLINE NatProbeRequest::NatProbeRequest(
     Nonce* const nonce,
     const int64_t sequence_number
