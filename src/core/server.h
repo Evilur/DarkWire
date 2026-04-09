@@ -562,9 +562,9 @@ FORCE_INLINE void Server::HandleKeepAlive(
     const uint32_t package_size,
     const sockaddr_in& from
 ) noexcept {
-    INFO_LOG("Receive a keep-alive package from the %s:%hu",
-             inet_ntoa(from.sin_addr),
-             ntohs(from.sin_port));
+    TRACE_LOG("Receive a keep-alive package from the %s:%hu",
+              inet_ntoa(from.sin_addr),
+              ntohs(from.sin_port));
 
     /* Try to get the key to decrypt the package */
     std::shared_lock details_lock(Peers::details_mutex);

@@ -342,7 +342,7 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
         /* Send the keep-alive */
         if (timestamp - server_details->last_to_package_timestamp >=
             keepalive) {
-            INFO_LOG("Sending a keep-alive to the server");
+            TRACE_LOG("Sending a keep-alive to the server");
             send_keepalive(server_details, timestamp);
         }
 
@@ -357,9 +357,9 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
             /* Send the keep-alive */
             if (timestamp - peer_details.last_to_package_timestamp >=
                 keepalive) {
-                INFO_LOG("Sending a keep-alive to the %s:%hu",
-                         inet_ntoa(peer_details.endpoint.sin_addr),
-                         ntohs(peer_details.endpoint.sin_port));
+                TRACE_LOG("Sending a keep-alive to the %s:%hu",
+                          inet_ntoa(peer_details.endpoint.sin_addr),
+                          ntohs(peer_details.endpoint.sin_port));
                 send_keepalive(&peer_details, timestamp);
             }
 
