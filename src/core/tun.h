@@ -55,7 +55,7 @@ private:
     using PFN_WintunCreateAdapter =
         WINTUN_ADAPTER_HANDLE(WINAPI*)(LPCWSTR, LPCWSTR, LPCWSTR);
     using PFN_WintunOpenAdapter =
-        WINTUN_ADAPTER_HANDLE(WINAPI*)(LPCWSTR);
+        WINTUN_ADAPTER_HANDLE(WINAPI*)(LPCWSTR, LPCWSTR);
     using PFN_WintunStartSession =
         WINTUN_SESSION_HANDLE(WINAPI*)(WINTUN_ADAPTER_HANDLE, DWORD);
     using PFN_WintunEndSession =
@@ -70,6 +70,8 @@ private:
         BYTE*(WINAPI*)(WINTUN_SESSION_HANDLE, DWORD*);
     using PFN_WintunReleaseReceivePacket =
         void(WINAPI*)(WINTUN_SESSION_HANDLE, BYTE*);
+    using PFN_WintunGetReadWaitEvent =
+        HANDLE(WINAPI*)(WINTUN_SESSION_HANDLE);
 
     inline static HMODULE hWintun = LoadLibrary("wintun.dll");
     inline static PFN_WintunCreateAdapter WintunCreateAdapter =
@@ -99,6 +101,9 @@ private:
     inline static PFN_WintunReleaseReceivePacket WintunReleaseReceivePacket =
         (PFN_WintunReleaseReceivePacket)
             GetProcAddress(hWintun, "WintunReleaseReceivePacket");
+    inline static PFN_WintunGetReadWaitEvent WintunGetReadWaitEvent =
+        (PFN_WintunGetReadWaitEvent)
+            GetProcAddress(hWintun, "WintunGetReadWaitEvent");
 #else
     const int32_t _tun_fd;
 #endif
@@ -114,8 +119,9 @@ private:
 FORCE_INLINE TUN::TUN(const char* const name) : _tun_name(name) {
     /* Try to create a fresh adapter. If it already exists, open it */
     const std::wstring wide_name = Utf8ToWide(name);
-    _adapter = WintunCreateAdapter(wide_name.c_str(), L"Wintun", nullptr);
-    if (_adapter == nullptr) _adapter = WintunOpenAdapter(wide_name.c_str());
+    _adapter = WintunCreateAdapter(L"Wintun", wide_name.c_str(), nullptr);
+    if (_adapter == nullptr)
+        _adapter = WintunOpenAdapter(L"Wintun", wide_name.c_str());
     if (_adapter == nullptr)
         throw TunError("Failed to create/open the Wintun adapter");
 
@@ -175,6 +181,9 @@ FORCE_INLINE void TUN::Up() noexcept {
 
 FORCE_INLINE int32_t TUN::Read(char* const buffer, const uint32_t buffer_size)
 const noexcept {
+    HANDLE h_event = WintunGetReadWaitEvent(_session);
+    WaitForSingleObject(h_event, INFINITE);
+
     DWORD packet_size = 0;
     BYTE* packet = WintunReceivePacket(_session, &packet_size);
 
