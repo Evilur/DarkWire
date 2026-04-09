@@ -9,22 +9,24 @@
 #include <ctime>
 #include <sodium.h>
 
+#pragma pack(push, 1)
 struct HandshakeRequest final {
     struct {
         PackageType type;
         uint8_t ephemeral_public_key[crypto_scalarmult_BYTES];
         uint8_t nonce[crypto_aead_chacha20poly1305_ietf_NPUBBYTES];
-    } __attribute__((packed)) header;
+    } header;
     struct {
         uint8_t static_public_key[crypto_scalarmult_BYTES];
         uint64_t timestamp;
         uint32_t ip;
         uint8_t netmask;
-    } __attribute__((packed)) data;
+    } data;
     uint8_t poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
     explicit HandshakeRequest(const uint8_t* epk, Nonce* nonce) noexcept;
-} __attribute__((packed));
+};
+#pragma pack(pop)
 
 FORCE_INLINE HandshakeRequest::HandshakeRequest(const uint8_t* const epk,
                                                 Nonce* const nonce) noexcept {

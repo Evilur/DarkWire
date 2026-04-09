@@ -7,24 +7,26 @@
 #include <cstring>
 #include <sodium.h>
 
+#pragma pack(push, 1)
 struct HandshakeResponse final {
     struct {
         PackageType type;
         uint8_t ephemeral_public_key[crypto_scalarmult_BYTES];
         uint8_t nonce[crypto_aead_chacha20poly1305_ietf_NPUBBYTES];
-    } __attribute__((packed)) header;
+    } header;
     struct {
         uint32_t local_ip;
         uint8_t netmask;
         uint32_t server_local_ip;
-    } __attribute__((packed)) data;
+    } data;
     uint8_t poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
     HandshakeResponse(const uint8_t* epk,
                       Nonce* nonce,
                       uint32_t response_local_ip,
                       uint8_t response_netmask) noexcept;
-} __attribute__((packed));
+};
+#pragma pack(pop)
 
 FORCE_INLINE HandshakeResponse::HandshakeResponse(
     const uint8_t* const epk,

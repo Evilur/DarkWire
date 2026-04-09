@@ -7,17 +7,18 @@
 
 #include <sodium.h>
 
+#pragma pack(push, 1)
 struct GetPeerResponse final {
     struct {
         PackageType type;
         uint8_t nonce[crypto_aead_chacha20poly1305_ietf_NPUBBYTES];
-    } __attribute__((packed)) header;
+    } header;
     struct {
         uint32_t local_ip;
         uint32_t real_ip;
         uint16_t real_port;
         uint8_t public_key[crypto_scalarmult_BYTES];
-    } __attribute__((packed)) data;
+    } data;
     uint8_t poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
     GetPeerResponse(Nonce* nonce,
@@ -25,7 +26,8 @@ struct GetPeerResponse final {
 
     void SetData(const sockaddr_in& endpoint,
                  uint8_t* public_key) noexcept;
-} __attribute__((packed));
+};
+#pragma pack(pop)
 
 FORCE_INLINE
 GetPeerResponse::GetPeerResponse(Nonce* const nonce,

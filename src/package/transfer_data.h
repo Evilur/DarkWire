@@ -9,6 +9,7 @@
 
 #include <sodium.h>
 
+#pragma pack(push, 1)
 struct TransferData final {
     struct {
         PackageType type;
@@ -16,7 +17,7 @@ struct TransferData final {
         uint32_t source_ip;
         uint32_t destination_ip;
         uint64_t timestamp;
-    } __attribute__((packed)) header;
+    } header;
     char data[UDPSocket::MTU - sizeof(header)];
 
     TransferData() noexcept;
@@ -24,7 +25,8 @@ struct TransferData final {
     void UpdateHeader(Nonce* nonce,
                       uint32_t destination_ip,
                       uint64_t timestamp) noexcept;
-} __attribute__((packed));
+};
+#pragma pack(pop)
 
 FORCE_INLINE TransferData::TransferData() noexcept {
     header.type = TRANSFER_DATA;

@@ -7,6 +7,7 @@
 
 #include <sodium.h>
 
+#pragma pack(push, 1)
 struct NatProbeResponse final {
     struct {
         PackageType type;
@@ -14,13 +15,14 @@ struct NatProbeResponse final {
         uint32_t source_ip;
         uint32_t destination_ip;
         uint64_t timestamp;
-    } __attribute__((packed)) header;
+    } header;
     uint8_t poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
     NatProbeResponse(Nonce* nonce,
                      uint32_t destination_ip,
                      uint64_t timestamp) noexcept;
-} __attribute__((packed));
+};
+#pragma pack(pop)
 
 FORCE_INLINE NatProbeResponse::NatProbeResponse(
     Nonce* const nonce,
