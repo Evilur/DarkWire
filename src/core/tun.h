@@ -110,7 +110,7 @@ private:
             BYTE* Packet
         );
 
-    inline static HMODULE hWintun = LoadLibrary("wintun.dll");
+        inline static HMODULE hWintun = LoadLibraryA("wintun.dll");
     inline static PFN_WintunCreateAdapter WintunCreateAdapter =
         (PFN_WintunCreateAdapter)
             GetProcAddress(hWintun, "WintunCreateAdapter");
@@ -158,7 +158,7 @@ FORCE_INLINE TUN::TUN(const char* const name) : _tun_name(name) {
     if (hWintun == nullptr) throw TunError("Failed to load wintun.dll");
     /* Try to create a fresh adapter. If it already exists, open it */
     const std::wstring wide_name = Utf8ToWide(name);
-    _adapter = WintunCreateAdapter(L"Wintun", wide_name.c_str(), nullptr);
+    _adapter = WintunCreateAdapter(wide_name.c_str(), L"Wintun", nullptr);
     if (_adapter == nullptr)
         _adapter = WintunOpenAdapter(wide_name.c_str());
     if (_adapter == nullptr)
@@ -194,10 +194,20 @@ FORCE_INLINE void TUN::Up() noexcept {
     System::Exec(
         String::Format(
             "netsh interface ipv4 set address name=\"%s\" "
-            "source=static address=%s/%hhu gateway=none store=active",
+            "source=static address=%s mask=%s gateway=none store=active",
             _tun_name.CStr(),
-            inet_ntoa({ local_ip.Netb() }),
-            netmask
+            local_ip.Get().CStr(),
+            binmask.Get().CStr()
+        )
+    );
+
+    /* Add the route */
+    System::Exec(
+        String::Format(
+            "netsh interface ipv4 add route %s/%hhu \"%s\" store=active",
+            network_prefix.Get().CStr(),
+            netmask,
+            _tun_name.CStr()
         )
     );
 
@@ -220,20 +230,10 @@ FORCE_INLINE void TUN::Up() noexcept {
 
 FORCE_INLINE int32_t TUN::Read(char* const buffer, const uint32_t buffer_size)
 const noexcept {
-    HANDLE h_event = WintunGetReadWaitEvent(_session);
-    WaitForSingleObject(h_event, INFINITE);
+    WaitForSingleObject(WintunGetReadWaitEvent(_session), INFINITE);
 
-    DWORD packet_size = 0;
+    DWORD packet_size;
     BYTE* packet = WintunReceivePacket(_session, &packet_size);
-
-#if LOG_LEVEL == 0
-    if (packet != nullptr)
-        TRACE_LOG("Read %llu bytes from the TUN", (uint64_t)packet_size);
-    else
-        WARN_LOG("Failed to read the data from the TUN");
-#endif
-
-    if (packet == nullptr) return -1;
 
     memcpy(buffer, packet, packet_size);
     WintunReleaseReceivePacket(_session, packet);
@@ -259,10 +259,11 @@ FORCE_INLINE std::wstring TUN::Utf8ToWide(const char* const str) {
     if (len <= 0)
         throw TunError("Failed to convert tunnel name to UTF-16");
 
-    std::wstring out(static_cast<size_t>(len - 1), L'\0');
+    std::wstring out(size_t(len), L'\0');
     if (MultiByteToWideChar(CP_UTF8, 0, str, -1, out.data(), len) <= 0)
         throw TunError("Failed to convert tunnel name to UTF-16");
 
+    out.pop_back();
     return out;
 }
 #else
@@ -278,7 +279,8 @@ FORCE_INLINE TUN::TUN(const char* const name) : _tun_name(name),
     /* Set the name of the new network interface */
     if (name == nullptr)
         throw TunError("Name of the tunnel cannot be nullptr");
-    strncpy(ifr.ifr_name, name, IFNAMSIZ);
+    strncpy(ifr.ifr_name, name, IFNAMSIZ - 1);
+    ifr.ifr_name[IFNAMSIZ - 1] = '\0';
 
     /* Create a new network interface */
     if (ioctl(_tun_fd, TUNSETIFF, &ifr) == -1) {
@@ -305,7 +307,7 @@ FORCE_INLINE void TUN::Up() noexcept {
 
     /* Up the interface */
     System::Exec(String::Format("ip addr add %s/%hhu dev %s",
-                                inet_ntoa({ local_ip.Netb() }),
+                                local_ip.Get().CStr(),
                                 netmask,
                                 _tun_name.CStr()));
     System::Exec(String::Format("ip link set %s mtu %d",

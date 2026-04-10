@@ -7,10 +7,9 @@
 
 #ifdef _WIN32
     #include <io.h>
-#pragma pack(push, 1)
+    #pragma pack(push, 1)
     struct iphdr {
-        uint8_t  ihl : 4;
-        uint8_t  version : 4;
+        uint8_t  version_ihl;
         uint8_t  tos;
         uint16_t tot_len;
         uint16_t id;
