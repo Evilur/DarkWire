@@ -1,7 +1,6 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 4.2)
 SET(CMAKE_CXX_STANDARD 20)
-SET(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-PROJECT(DarkWire)
+PROJECT(DarkWire VERSION 1.0.0)
 
 # Set compile options
 IF (CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -28,17 +27,27 @@ ENDIF ()
 # Search header files in the 'src' directory
 INCLUDE_DIRECTORIES(src)
 
-# Build the client
-FILE(GLOB_RECURSE SOURCES "src/*.cpp")
-ADD_EXECUTABLE(dw src/main.cpp)
-
-# Build unit tests
-FILE(GLOB_RECURSE SOURCES "test/*.cpp")
-LIST(FILTER SOURCES EXCLUDE REGEX ".*/src/main\\.cpp$")
-
-# Link libraries
+# Set metadata
 IF(WIN32)
+    SET(APP_COMPANY   "Evilur")
+    SET(APP_DESC      "Build the Peer2Peer virtual private network (VPN) "
+                      "for fast data transfering between the peers")
+    SET(APP_NAME      "DarkWire")
+    SET(EXE_NAME      "dw.exe")
+    SET(APP_COPYRIGHT "Copyright (C) 2026 Evilur (Andrew Shershunov) <the.evilur@gmail.com>")
+    CONFIGURE_FILE(
+        ${CMAKE_CURRENT_SOURCE_DIR}/meta.rc
+        ${CMAKE_CURRENT_BINARY_DIR}/meta.rc
+        @ONLY
+    )
+ENDIF()
+
+
+# Build the app and link libraries
+IF(WIN32)
+    ADD_EXECUTABLE(dw src/main.cpp ${CMAKE_CURRENT_BINARY_DIR}/meta.rc)
     TARGET_LINK_LIBRARIES(dw PRIVATE sodium ws2_32)
 ELSE()
+    ADD_EXECUTABLE(dw src/main.cpp)
     TARGET_LINK_LIBRARIES(dw PRIVATE sodium)
 ENDIF()
