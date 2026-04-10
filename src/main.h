@@ -7,20 +7,6 @@
 
 #ifdef _WIN32
     #include <io.h>
-    #pragma pack(push, 1)
-    struct iphdr {
-        uint8_t  version_ihl;
-        uint8_t  tos;
-        uint16_t tot_len;
-        uint16_t id;
-        uint16_t frag_off;
-        uint8_t  ttl;
-        uint8_t  protocol;
-        uint16_t check;
-        uint32_t saddr;
-        uint32_t daddr;
-    };
-#pragma pack(pop)
     #define ISATTY _isatty
     #define FILENO _fileno
 #else

@@ -392,12 +392,12 @@ static int32_t run_server() {
         /* Read the package to the buffer from the TUN */
         const int32_t package_size = tun->Read(package.data, MTU);
 
-        /* Cast the buffer to the ip header struct */
-        const iphdr* const ip_header = (iphdr*)(void*)package.data;
+        /* Check for the ip version */
+        if (*(uint8_t*)package.data >> 4U != 4U) continue;
 
         /* Get the destination ip */
         NetAddr destinastion;
-        destinastion.SetNetb(ip_header->daddr);
+        destinastion.SetNetb(*(uint32_t*)(void*)(package.data + 16));
 
         /* Drop multicasts */
         if (destinastion.Hostb() >= 0xe0000000 &&

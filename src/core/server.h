@@ -507,7 +507,7 @@ FORCE_INLINE void Server::HandleTransferData(
         source_peer_details->from_sequence_number = package_sequence_number;
 
         /* Get the real destination address */
-        destination_netb = ((iphdr*)(void*)package->data)->daddr;
+        destination_netb = *(uint32_t*)(void*)(package->data + 16);
 
         /* If we need to write the package to the TUN */
         if ((destination_netb & binmask.Netb()) != network_prefix.Netb() ||
