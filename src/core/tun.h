@@ -200,8 +200,8 @@ FORCE_INLINE void TUN::Up() noexcept {
             "netsh interface ipv4 set address name=\"%s\" "
             "source=static address=%s mask=%s gateway=none store=active",
             _tun_name.CStr(),
-            local_ip.Get().CStr(),
-            binmask.Get().CStr()
+            local_ip.ToStr().CStr(),
+            binmask.ToStr().CStr()
         )
     );
 
@@ -210,7 +210,7 @@ FORCE_INLINE void TUN::Up() noexcept {
         String::Format(
             "netsh interface ipv4 add route %s/%hhu \"%s\" "
             "metric=1 store=active",
-            network_prefix.Get().CStr(),
+            network_prefix.ToStr().CStr(),
             netmask,
             _tun_name.CStr()
         )
@@ -312,7 +312,7 @@ FORCE_INLINE void TUN::Up() noexcept {
 
     /* Up the interface */
     System::Exec(String::Format("ip addr add %s/%hhu dev %s",
-                                local_ip.Get().CStr(),
+                                local_ip.ToStr().CStr(),
                                 netmask,
                                 _tun_name.CStr()));
     System::Exec(String::Format("ip link set %s mtu %d",

@@ -681,7 +681,7 @@ FORCE_INLINE void Client::HandleP2PHandshakeRequest(
     const sockaddr_in& from
 ) {
     INFO_LOG("Receive a handshake request from the %s peer%s",
-             inet_ntoa({ package->header.source_ip }),
+             NetAddr::ToStr(package->header.source_ip).CStr(),
              equal(Server::endpoint, from) ?
              " via the server" : "");
 
@@ -841,7 +841,7 @@ FORCE_INLINE void Client::HandleP2PHandshakeRequest(
 
     /* Send the encrypted package */
     INFO_LOG("Sending the handshake resposne to %s peer%s",
-             inet_ntoa({ peer_ip }),
+             NetAddr::ToStr(peer_ip).CStr(),
              package->header.nat_probe ?
              " via the server" : "");
     main_socket.Send((char*)(void*)&response,
@@ -869,7 +869,7 @@ FORCE_INLINE void Client::HandleP2PHandshakeResponse(
     const sockaddr_in& from
 ) {
     INFO_LOG("Receive a handshake response from the %s peer%s",
-             inet_ntoa({ package->header.source_ip }),
+             NetAddr::ToStr(package->header.source_ip).CStr(),
              equal(Server::endpoint, from) ?
              " via the server" : "");
 
@@ -989,7 +989,7 @@ FORCE_INLINE void Client::HandleP2PHandshakeResponse(
     peer_temp_details->nonce.Release();
 
     INFO_LOG("The handshake from the %s peer has been successfully handled",
-             inet_ntoa({ peer_ip }));
+             NetAddr::ToStr(peer_ip).CStr());
 
     /* If we need to probe the nat type */
     if (package->header.nat_probe) {
@@ -1011,7 +1011,7 @@ FORCE_INLINE void Client::HandleNatProbeRequest(
     const sockaddr_in& from
 ) noexcept {
     TRACE_LOG("Receive a nat probe request package from the %s peer",
-              inet_ntoa({ package->header.source_ip }));
+              NetAddr::ToStr(package->header.source_ip).CStr());
 
     /* Get the peer ip from the package */
     const uint32_t peer_ip = package->header.source_ip;
@@ -1022,7 +1022,7 @@ FORCE_INLINE void Client::HandleNatProbeRequest(
     if (peer_details == nullptr) {
         TRACE_LOG("Failed to handle the nat probe response from the %s peer: "
                   "have not enough infomation",
-                  inet_ntoa({ peer_ip }));
+                  NetAddr::ToStr(peer_ip).CStr());
         return;
     }
 
@@ -1077,7 +1077,7 @@ FORCE_INLINE void Client::HandleNatProbeRequest(
 
     /* Send the package via the relay server */
     TRACE_LOG("Sending a nat probe response to the %s peer via the server",
-              inet_ntoa({ peer_ip }));
+              NetAddr::ToStr(peer_ip).CStr());
     main_socket.Send((char*)(void*)&response,
                      sizeof(response),
                      Server::endpoint);
@@ -1090,7 +1090,7 @@ FORCE_INLINE void Client::HandleNatProbeResponse(
 ) noexcept {
     TRACE_LOG("Receive a nat probe response package from the %s peer "
               "via the server",
-              inet_ntoa({ package->header.source_ip }));
+              NetAddr::ToStr(package->header.source_ip).CStr());
 
     /* Get the peer ip from the package */
     const uint32_t peer_ip = package->header.source_ip;
@@ -1102,7 +1102,7 @@ FORCE_INLINE void Client::HandleNatProbeResponse(
     if (peer_temp_details == nullptr) {
         TRACE_LOG("Failed to handle the nat probe response from the %s peer: "
                   "have not enough infomation",
-                  inet_ntoa({ peer_ip }));
+                  NetAddr::ToStr(peer_ip).CStr());
         return;
     }
 
@@ -1113,7 +1113,7 @@ FORCE_INLINE void Client::HandleNatProbeResponse(
     if (peer_temp_details == nullptr) {
         TRACE_LOG("Failed to handle the nat probe response from the %s peer: "
                   "have not enough infomation",
-                  inet_ntoa({ peer_ip }));
+                  NetAddr::ToStr(peer_ip).CStr());
         return;
     }
 
@@ -1151,7 +1151,7 @@ FORCE_INLINE void Client::HandleNatProbeResponse(
     /* Remove the temporary entry */
     Peers::temp_details->Delete(peer_ip);
     INFO_LOG("Direct channel to the %s peer is available",
-             inet_ntoa({ peer_ip }));
+             NetAddr::ToStr(peer_ip).CStr());
 }
 
 FORCE_INLINE void Client::GetPeerFromServer(const uint32_t peer_ip)
@@ -1195,7 +1195,7 @@ noexcept {
 
         /* Send the package to the server */
         INFO_LOG("Sending the get '%s' peer package",
-                 inet_ntoa({ peer_ip }));
+                 NetAddr::ToStr(peer_ip).CStr());
         main_socket.Send((char*)(void*)&package,
                          sizeof(package),
                          Server::endpoint);
@@ -1230,7 +1230,7 @@ void Client::SendP2PHandshakeRequest(const uint32_t peer_ip,
      * Check for response every iteration */
     for (uint8_t i = 0; i < 8 && Peers::temp_details->Has(peer_ip); i++) {
         INFO_LOG("Sending a handshake request to the %s peer%s",
-                 inet_ntoa({ peer_ip }),
+                 NetAddr::ToStr(peer_ip).CStr(),
                  nat_probe ? " via the server" : "");
 
         /* Get the current timestamp */
@@ -1306,7 +1306,8 @@ void Client::SendP2PHandshakeRequest(const uint32_t peer_ip,
 
 FORCE_INLINE void Client::NatProbe(const uint32_t peer_ip,
                                    const sockaddr_in real_endpoint) {
-    INFO_LOG("Start a nat probing the %s peer", inet_ntoa({ peer_ip }));
+    INFO_LOG("Start a nat probing the %s peer",
+             NetAddr::ToStr(peer_ip).CStr());
 
     /* Send: 16 ping packages
      * Every: 250 ms
@@ -1355,7 +1356,7 @@ FORCE_INLINE void Client::NatProbe(const uint32_t peer_ip,
 
         /* Send the package to the real endpoint */
         TRACE_LOG("Sending a nat probe request to the %s peer",
-                  inet_ntoa({ peer_ip }));
+                  NetAddr::ToStr(peer_ip).CStr());
         main_socket.Send((char*)(void*)&package,
                          sizeof(package),
                          real_endpoint);

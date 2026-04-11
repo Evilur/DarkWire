@@ -25,9 +25,9 @@ public:
 
     [[nodiscard]] uint32_t Netb() const noexcept;
 
-    [[nodiscard]] String Get() const noexcept;
+    [[nodiscard]] String ToStr() const noexcept;
 
-    [[nodiscard]] static String Get(uint32_t address) noexcept;
+    [[nodiscard]] static String ToStr(uint32_t address) noexcept;
 
 private:
     uint32_t _hostb = INADDR_ANY;
@@ -48,13 +48,13 @@ FORCE_INLINE uint32_t NetAddr::Hostb() const noexcept { return _hostb; }
 
 FORCE_INLINE uint32_t NetAddr::Netb() const noexcept { return _netb; }
 
-FORCE_INLINE String NetAddr::Get() const noexcept {
+FORCE_INLINE String NetAddr::ToStr() const noexcept {
     const uint8_t* const bytes = (uint8_t*)(void*)&_netb;
     return String::Format("%hhu.%hhu.%hhu.%hhu",
                           bytes[0], bytes[1], bytes[2], bytes[3]);
 }
 
-FORCE_INLINE String NetAddr::Get(uint32_t address) noexcept {
+FORCE_INLINE String NetAddr::ToStr(uint32_t address) noexcept {
     const uint8_t* bytes = (uint8_t*)(void*)&address;
     return String::Format("%hhu.%hhu.%hhu.%hhu",
                           *bytes++, *bytes++, *bytes++, *bytes);

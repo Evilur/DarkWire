@@ -345,6 +345,7 @@ static int32_t handle_config(const char* const name) {
         if (package != nullptr) {                                             \
             /* Check for the ip version */                                    \
             if (*(uint8_t*)package >> 4U != 4U) continue;                     \
+            TRACE_LOG("Read %d bytes from the TUN", (int32_t)package_size);   \
                                                                               \
             /* Copy the package */                                            \
             memcpy(transfer.data, package, package_size);                     \
@@ -370,7 +371,7 @@ static int32_t handle_config(const char* const name) {
                 WintunGetReadWaitEvent(tun->Session()),                       \
                 INFINITE);                                                    \
         else {                                                                \
-            WARN_LOG("Package read failed");                                  \
+            WARN_LOG("Failed to read the data from the TUN");                 \
             break;                                                            \
         }                                                                     \
     }
