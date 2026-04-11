@@ -17,41 +17,6 @@
     extern "C" {
         #include <wintun.h>
     }
-#else
-    #include <fcntl.h>
-    #include <linux/if.h>
-    #include <linux/if_tun.h>
-    #include <linux/ip.h>
-    #include <sys/ioctl.h>
-    #include <unistd.h>
-#endif
-
-/**
- * Class for working with virtual network interface
- * @author Evilur <the.evilur@gmail.com>
- */
-class TUN final {
-public:
-    PREVENT_COPY_AND_MOVE(TUN);
-
-    explicit TUN(const char* name);
-
-    ~TUN() noexcept;
-
-    void Up() noexcept;
-
-    [[nodiscard]] bool IsUp() const noexcept;
-
-    int32_t Read(char* buffer, uint32_t mtu) const noexcept;
-
-    void Write(const char* buffer, uint32_t buffer_size) noexcept;
-
-private:
-    const String _tun_name;
-
-#ifdef _WIN32
-    WINTUN_ADAPTER_HANDLE _adapter = nullptr;
-    WINTUN_SESSION_HANDLE _session = nullptr;
 
     using PFN_WintunCreateAdapter =
         WINTUN_ADAPTER_HANDLE (WINAPI*)(
@@ -142,6 +107,45 @@ private:
         (PFN_WintunGetReadWaitEvent)
             GetProcAddress(hWintun, "WintunGetReadWaitEvent");
 #else
+    #include <fcntl.h>
+    #include <linux/if.h>
+    #include <linux/if_tun.h>
+    #include <linux/ip.h>
+    #include <sys/ioctl.h>
+    #include <unistd.h>
+#endif
+
+/**
+ * Class for working with virtual network interface
+ * @author Evilur <the.evilur@gmail.com>
+ */
+class TUN final {
+public:
+    PREVENT_COPY_AND_MOVE(TUN);
+
+    explicit TUN(const char* name);
+
+    ~TUN() noexcept;
+
+    void Up() noexcept;
+
+    [[nodiscard]] bool IsUp() const noexcept;
+
+#ifdef _WIN32
+    [[nodiscard]] WINTUN_SESSION_HANDLE Session() const noexcept;
+#else
+    [[nodiscard]] int32_t Read(char* buffer, uint32_t mtu) const noexcept;
+#endif
+
+    void Write(const char* buffer, uint32_t buffer_size) noexcept;
+
+private:
+    const String _tun_name;
+
+#ifdef _WIN32
+    WINTUN_ADAPTER_HANDLE _adapter = nullptr;
+    WINTUN_SESSION_HANDLE _session = nullptr;
+#else
     const int32_t _tun_fd;
 #endif
 
@@ -165,7 +169,7 @@ FORCE_INLINE TUN::TUN(const char* const name) : _tun_name(name) {
         throw TunError("Failed to create/open the Wintun adapter");
 
     /* Create a session */
-    _session = WintunStartSession(_adapter, 0x400000);
+    _session = WintunStartSession(_adapter, 0x800000);
     if (_session == nullptr) {
         WintunCloseAdapter(_adapter);
         _adapter = nullptr;
@@ -204,7 +208,8 @@ FORCE_INLINE void TUN::Up() noexcept {
     /* Add the route */
     System::Exec(
         String::Format(
-            "netsh interface ipv4 add route %s/%hhu \"%s\" store=active",
+            "netsh interface ipv4 add route %s/%hhu \"%s\" "
+            "metric=1 store=active",
             network_prefix.Get().CStr(),
             netmask,
             _tun_name.CStr()
@@ -220,6 +225,14 @@ FORCE_INLINE void TUN::Up() noexcept {
         )
     );
 
+    /* Up the interface */
+    System::Exec(
+        String::Format(
+            "netsh interface set interface name=\"%s\" admin=enabled",
+            _tun_name.CStr()
+        )
+    );
+
     INFO_LOG("Interface [%s] is up", _tun_name.CStr());
     _is_up = true;
 
@@ -228,16 +241,8 @@ FORCE_INLINE void TUN::Up() noexcept {
         System::Exec(command);
 }
 
-FORCE_INLINE int32_t TUN::Read(char* const buffer, const uint32_t buffer_size)
-const noexcept {
-    WaitForSingleObject(WintunGetReadWaitEvent(_session), INFINITE);
-
-    DWORD packet_size;
-    BYTE* packet = WintunReceivePacket(_session, &packet_size);
-
-    memcpy(buffer, packet, packet_size);
-    WintunReleaseReceivePacket(_session, packet);
-    return (int32_t)packet_size;
+FORCE_INLINE WINTUN_SESSION_HANDLE TUN::Session() const {
+    return _session;
 }
 
 FORCE_INLINE void TUN::Write(const char* const buffer,

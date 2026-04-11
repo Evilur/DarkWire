@@ -332,6 +332,77 @@ static int32_t handle_config(const char* const name) {
     return 0;
 }
 
+#ifdef _WIN32
+#define RUN_READ_TUN_LOOP(TYPE)                                               \
+    /* Handle incoming packages from the TUN */                               \
+    const uint32_t MTU = Config::Interface::mtu;                              \
+    TransferData transfer;                                                     \
+    for (;;) {                                                                \
+        /* Get the package */                                                 \
+        DWORD package_size;                                                   \
+        BYTE *package =                                                       \
+            WintunReceivePacket(tun->Session(), &package_size);               \
+        if (package != nullptr) {                                             \
+            /* Check for the ip version */                                    \
+            if (*(uint8_t*)package >> 4U != 4U) continue;                     \
+                                                                              \
+            /* Copy the package */                                            \
+            memcpy(transfer.data, package, package_size);                     \
+            WintunReleaseReceivePacket(tun->Session(), package);              \
+                                                                              \
+            /* Get the destination ip */                                      \
+            NetAddr destinastion;                                             \
+            destinastion.SetNetb(*(uint32_t*)(void*)(transfer.data + 16));    \
+                                                                              \
+            /* Drop multicasts */                                             \
+            if (destinastion.Hostb() >= 0xe0000000 &&                         \
+                destinastion.Hostb() <= 0xefffffff)                           \
+                continue;                                                     \
+                                                                              \
+            /* Drop broadcast */                                              \
+            if (destinastion.Hostb() == broadcast.Hostb()) continue;          \
+                                                                              \
+            /* Handle the TUN package */                                      \
+            TYPE::                                                            \
+            HandleTunPackage(transfer, package_size, destinastion.Netb());    \
+        } else if (GetLastError() == ERROR_NO_MORE_ITEMS)                     \
+            WaitForSingleObject(                                              \
+                WintunGetReadWaitEvent(tun->Session()),                       \
+                INFINITE);                                                    \
+        else {                                                                \
+            WARN_LOG("Package read failed");                                  \
+            break;                                                            \
+        }                                                                     \
+    }
+#else
+#define RUN_READ_TUN_LOOP(TYPE)                                               \
+    /* Handle incoming packages from the TUN */                               \
+    const uint32_t MTU = Config::Interface::mtu;                              \
+    TransferData transfer;                                                    \
+    for (;;) {                                                                \
+        /* Read the transfer to the buffer from the TUN */                    \
+        const int32_t package_size = tun->Read(transfer.data, MTU);           \
+                                                                              \
+        /* Check for the ip version */                                        \
+        if (*(uint8_t*)transfer.data >> 4U != 4U) continue;                   \
+                                                                              \
+        /* Get the destination ip */                                          \
+        NetAddr destinastion;                                                 \
+        destinastion.SetNetb(*(uint32_t*)(void*)(transfer.data + 16));        \
+                                                                              \
+        /* Drop multicasts */                                                 \
+        if (destinastion.Hostb() >= 0xe0000000 &&                             \
+            destinastion.Hostb() <= 0xefffffff)                               \
+            continue;                                                         \
+                                                                              \
+        /* Drop broadcast */                                                  \
+        if (destinastion.Hostb() == broadcast.Hostb()) continue;              \
+                                                                              \
+        /* Handle the TUN transfer */                                         \
+        TYPE::HandleTunPackage(transfer, package_size, destinastion.Netb());  \
+    }
+#endif
+
 static int32_t run_client() {
     /* Init the client */
     Client::Init();
@@ -346,31 +417,8 @@ static int32_t run_client() {
     /* Handle all incoming packages in another thread */
     std::thread(Client::RunHandlePackagesLoop).detach();
 
-    /* Handle incoming packages from the TUN */
-    const uint32_t MTU = Config::Interface::mtu;
-    TransferData package;
-    for (;;) {
-        /* Read the package to the buffer from the TUN */
-        const int32_t package_size = tun->Read(package.data, MTU);
-
-        /* Check for the ip version */
-        if (*(uint8_t*)package.data >> 4U != 4U) continue;
-
-        /* Get the destination ip */
-        NetAddr destinastion;
-        destinastion.SetNetb(*(uint32_t*)(void*)(package.data + 16));
-
-        /* Drop multicasts */
-        if (destinastion.Hostb() >= 0xe0000000 &&
-            destinastion.Hostb() <= 0xefffffff)
-            continue;
-
-        /* Drop broadcast */
-        if (destinastion.Hostb() == broadcast.Hostb()) continue;
-
-        /* Handle the TUN package */
-        Client::HandleTunPackage(package, package_size, destinastion.Netb());
-    }
+    /* Handle all the the TUN packages */
+    RUN_READ_TUN_LOOP(Client);
 
     return -1;
 }
@@ -385,31 +433,8 @@ static int32_t run_server() {
     /* Handle all incoming packages in another thread */
     std::thread(Server::RunHandlePackagesLoop).detach();
 
-    /* Handle incoming packages from the TUN */
-    const uint32_t MTU = Config::Interface::mtu;
-    TransferData package;
-    for (;;) {
-        /* Read the package to the buffer from the TUN */
-        const int32_t package_size = tun->Read(package.data, MTU);
-
-        /* Check for the ip version */
-        if (*(uint8_t*)package.data >> 4U != 4U) continue;
-
-        /* Get the destination ip */
-        NetAddr destinastion;
-        destinastion.SetNetb(*(uint32_t*)(void*)(package.data + 16));
-
-        /* Drop multicasts */
-        if (destinastion.Hostb() >= 0xe0000000 &&
-            destinastion.Hostb() <= 0xefffffff)
-            continue;
-
-        /* Drop broadcast */
-        if (destinastion.Hostb() == broadcast.Hostb()) continue;
-
-        /* Handle the TUN package */
-        Server::HandleTunPackage(package, package_size, destinastion.Netb());
-    }
+    /* Handle all the the TUN packages */
+    RUN_READ_TUN_LOOP(Server);
 
     return -1;
 }
