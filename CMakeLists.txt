@@ -8,6 +8,7 @@ IF (CMAKE_BUILD_TYPE STREQUAL "Debug")
         -fdiagnostics-color=always \
         -fsanitize=address \
         -fno-omit-frame-pointer")
+    SET(CMAKE_CXX_SCAN_FOR_MODULES OFF)
     SET(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 ELSE ()
     SET(CMAKE_CXX_FLAGS "-g0 -O2 -Winline -static \

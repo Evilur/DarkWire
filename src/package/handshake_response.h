@@ -18,23 +18,26 @@ struct HandshakeResponse final {
         uint32_t local_ip;
         uint8_t netmask;
         uint32_t server_ip;
+        uint32_t peers_number;
     } data;
     uint8_t poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
     HandshakeResponse(Nonce* nonce,
                       const uint8_t* epk,
                       uint32_t response_local_ip,
-                      uint8_t response_netmask) noexcept;
+                      uint8_t response_netmask,
+                      uint32_t peers_number) noexcept;
 };
 #pragma pack(pop)
 
-static_assert(sizeof(HandshakeResponse) == 70, "Invalid struct packing");
+static_assert(sizeof(HandshakeResponse) == 74, "Invalid struct packing");
 
 FORCE_INLINE HandshakeResponse::HandshakeResponse(
     Nonce* const nonce,
     const uint8_t* const epk,
     const uint32_t response_local_ip,
-    const uint8_t response_netmask
+    const uint8_t response_netmask,
+    const uint32_t peers_number
 ) noexcept {
     /* Set the type */
     header.type = HANDSHAKE_RESPONSE;
@@ -51,4 +54,7 @@ FORCE_INLINE HandshakeResponse::HandshakeResponse(
 
     /* Set the server's local ip */
     data.server_ip = local_ip.Netb();
+
+    /* Set the peers number */
+    data.peers_number = peers_number;
 }

@@ -428,7 +428,8 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     HandshakeResponse response(nonce,
                                ephemeral_keys.Public(),
                                response_ip,
-                               response_netmask);
+                               response_netmask,
+                               Peers::number);
 
     /* Encrypt the resposne */
     {
@@ -447,6 +448,9 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     }
 
     /* Send the response */
+    INFO_LOG("Sending a handshake response to the %s:%hhu",
+             NetAddr::ToStr(from.sin_addr.s_addr).CStr(),
+             ntohl(from.sin_port));
     main_socket.Send((char*)(void*)&response,
                      sizeof(HandshakeResponse),
                      from);

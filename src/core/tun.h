@@ -9,7 +9,6 @@
 #include "util/system.h"
 
 #include <cstring>
-
 #ifdef _WIN32
     #include <windows.h>
     #include <ws2tcpip.h>
@@ -129,12 +128,15 @@ public:
 
     void Up() noexcept;
 
+    void Down() noexcept;
+
     [[nodiscard]] bool IsUp() const noexcept;
 
 #ifdef _WIN32
     [[nodiscard]] WINTUN_SESSION_HANDLE Session() const noexcept;
 #else
-    [[nodiscard]] int32_t Read(char* buffer, uint32_t mtu) const noexcept;
+    [[nodiscard]] int32_t Read(char* buffer,
+                               uint32_t buffer_size) const noexcept;
 #endif
 
     void Write(const char* buffer, uint32_t buffer_size) noexcept;
@@ -347,5 +349,10 @@ FORCE_INLINE void TUN::Write(const char* const buffer,
     write(_tun_fd, buffer, buffer_size);
 }
 #endif
+
+FORCE_INLINE void TUN::Down() noexcept {
+    /* TODO: implement this */
+    _is_up = false;
+}
 
 FORCE_INLINE bool TUN::IsUp() const noexcept { return _is_up; }
