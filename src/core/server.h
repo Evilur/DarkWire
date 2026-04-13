@@ -50,8 +50,9 @@ private:
             UniqPtr<Nonce> nonce;
             sockaddr_in endpoint;
             uint64_t last_handshake_timestamp;
-            int64_t from_sequence_number;
-            int64_t to_sequence_number;
+            uint64_t from_sequence_number;
+            uint64_t to_sequence_number;
+            uint64_t from_sequence_bitmask;
             uint8_t static_public_key[crypto_scalarmult_BYTES];
             uint8_t key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
         } __attribute__((aligned(128)));
@@ -476,12 +477,10 @@ FORCE_INLINE void Server::HandleTransferData(
             Peers::details->Get(package->header.source_ip);
         if (source_peer_details == nullptr) { return; }
 
-        /* Get the package sequence number */
-        const int64_t package_sequence_number = package->header.sequence_number;
-
         /* Check the package for duplicate */
-        if (package_sequence_number -
-            source_peer_details->from_sequence_number < -4) {
+        if (is_package_duplicate(package->header.sequence_number,
+                                 source_peer_details->from_sequence_number,
+                                 source_peer_details->from_sequence_bitmask)) {
             WARN_LOG("Duplicate message found");
             return;
         }
@@ -506,9 +505,6 @@ FORCE_INLINE void Server::HandleTransferData(
         /* Update the endpoint */
         if (!equal(source_peer_details->endpoint, from))
             source_peer_details->endpoint = from;
-
-        /* Update the last sequence number */
-        source_peer_details->from_sequence_number = package_sequence_number;
 
         /* Get the real destination address */
         destination_netb = *(uint32_t*)(void*)(package->data + 16);
@@ -585,11 +581,10 @@ FORCE_INLINE void Server::HandleKeepAlive(
         Peers::details->Get(package->header.source_ip);
     if (peer_details == nullptr) { return; }
 
-    /* Get the package sequence number */
-    const int64_t package_sequence_number = package->header.sequence_number;
-
     /* Check the package for duplicate */
-    if (package_sequence_number - peer_details->from_sequence_number < -4) {
+    if (is_package_duplicate(package->header.sequence_number,
+                             peer_details->from_sequence_number,
+                             peer_details->from_sequence_bitmask)) {
         WARN_LOG("Duplicate message found");
         return;
     }
@@ -615,9 +610,6 @@ FORCE_INLINE void Server::HandleKeepAlive(
 
     /* Update the endpoint */
     if (!equal(peer_details->endpoint, from)) peer_details->endpoint = from;
-
-    /* Update the last sequence number */
-    peer_details->from_sequence_number = package_sequence_number;
 }
 
 FORCE_INLINE void Server::HandleGetPeerRequest(
@@ -638,12 +630,10 @@ FORCE_INLINE void Server::HandleGetPeerRequest(
     /* Check the endpoint */
     if (!equal(source_peer_details->endpoint, from)) return;
 
-    /* Get the package sequence number */
-    const int64_t package_sequence_number = package->header.sequence_number;
-
     /* Check the package for duplicate */
-    if (package_sequence_number -
-        source_peer_details->from_sequence_number < -4) {
+    if (is_package_duplicate(package->header.sequence_number,
+                             source_peer_details->from_sequence_number,
+                             source_peer_details->from_sequence_bitmask)) {
         WARN_LOG("Duplicate message found");
         return;
     }
@@ -670,9 +660,6 @@ FORCE_INLINE void Server::HandleGetPeerRequest(
     /* Update the endpoint */
     if (!equal(source_peer_details->endpoint, from))
         source_peer_details->endpoint = from;
-
-    /* Update the last sequence number */
-    source_peer_details->from_sequence_number = package_sequence_number;
 
     /* Get the peer local ip */
     uint32_t peer_ip = package->data.requested_peer_ip;

@@ -12,14 +12,14 @@ struct NatProbeResponse final {
     struct {
         PackageType type;
         uint8_t nonce[crypto_aead_chacha20poly1305_ietf_NPUBBYTES];
-        int64_t sequence_number;
+        uint64_t sequence_number;
         uint32_t source_ip;
         uint32_t destination_ip;
     } header;
     uint8_t poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
     NatProbeResponse(Nonce* nonce,
-                     int64_t sequence_number,
+                     uint64_t sequence_number,
                      uint32_t destination_ip) noexcept;
 };
 #pragma pack(pop)
@@ -28,7 +28,7 @@ static_assert(sizeof(NatProbeResponse) == 45, "Invalid struct packing");
 
 FORCE_INLINE NatProbeResponse::NatProbeResponse(
     Nonce* const nonce,
-    const int64_t sequence_number,
+    const uint64_t sequence_number,
     const uint32_t destination_ip
 ) noexcept {
     /* Set the package type */

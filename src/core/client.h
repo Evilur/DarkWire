@@ -57,8 +57,9 @@ private:
             uint64_t last_to_package_timestamp;
             uint64_t last_handshake_timestamp;
             uint64_t next_handshake_timestamp;
-            int64_t from_sequence_number;
-            int64_t to_sequence_number;
+            uint64_t from_sequence_number;
+            uint64_t from_sequence_bitmask;
+            uint64_t to_sequence_number;
             uint8_t public_key[crypto_scalarmult_BYTES];
             uint8_t key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
         } __attribute__((aligned(128)));
@@ -583,11 +584,10 @@ FORCE_INLINE void Client::HandleTransferData(
         Peers::details->Get(package->header.source_ip);
     if (peer_details == nullptr) { return; }
 
-    /* Get the package sequence number */
-    const int64_t package_sequence_number = package->header.sequence_number;
-
     /* Check the package for duplicate */
-    if (package_sequence_number - peer_details->from_sequence_number < -4) {
+    if (is_package_duplicate(package->header.sequence_number,
+                             peer_details->from_sequence_number,
+                             peer_details->from_sequence_bitmask)) {
         WARN_LOG("Duplicate message found");
         return;
     }
@@ -608,9 +608,6 @@ FORCE_INLINE void Client::HandleTransferData(
         WARN_LOG("Forged message found");
         return;
     }
-
-    /* If all is OK, update the sequence number */
-    peer_details->from_sequence_number = package_sequence_number;
 
     /* Write the package to the tun */
     tun->Write(package->data, (uint32_t)data_size);
@@ -1054,11 +1051,10 @@ FORCE_INLINE void Client::HandleNatProbeRequest(
         return;
     }
 
-    /* Get the package sequence number */
-    const int64_t package_sequence_number = package->header.sequence_number;
-
     /* Check the package for duplicate */
-    if (package_sequence_number - peer_details->from_sequence_number < -4) {
+    if (is_package_duplicate(package->header.sequence_number,
+                             peer_details->from_sequence_number,
+                             peer_details->from_sequence_bitmask)) {
         WARN_LOG("Duplicate message found");
         return;
     }
@@ -1145,11 +1141,10 @@ FORCE_INLINE void Client::HandleNatProbeResponse(
         return;
     }
 
-    /* Get the package sequence number */
-    const int64_t package_sequence_number = package->header.sequence_number;
-
     /* Check the package for duplicate */
-    if (package_sequence_number - peer_details->from_sequence_number < -4) {
+    if (is_package_duplicate(package->header.sequence_number,
+                             peer_details->from_sequence_number,
+                             peer_details->from_sequence_bitmask)) {
         WARN_LOG("Duplicate message found");
         return;
     }

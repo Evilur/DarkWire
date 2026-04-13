@@ -49,4 +49,9 @@ static inline void on_terminate();
 
 [[nodiscard]] static int32_t run_server();
 
-void calc_net();
+[[nodiscard]] bool is_package_duplicate(uint64_t sequence_number,
+                                        uint64_t& last_sequence_number,
+                                        uint64_t& sequence_bitmask)
+noexcept;
+
+void calc_net() noexcept;
