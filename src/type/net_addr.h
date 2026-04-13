@@ -57,5 +57,5 @@ FORCE_INLINE String NetAddr::ToStr() const noexcept {
 FORCE_INLINE String NetAddr::ToStr(uint32_t address) noexcept {
     const uint8_t* bytes = (uint8_t*)(void*)&address;
     return String::Format("%hhu.%hhu.%hhu.%hhu",
-                          *bytes++, *bytes++, *bytes++, *bytes);
+                          bytes[0], bytes[1], bytes[2], bytes[3]);
 }
