@@ -51,8 +51,8 @@ private:
             sockaddr_in endpoint;
             uint64_t last_handshake_timestamp;
             uint64_t from_sequence_number;
-            uint64_t to_sequence_number;
             uint64_t from_sequence_bitmask;
+            uint64_t to_sequence_number;
             uint8_t static_public_key[crypto_scalarmult_BYTES];
             uint8_t key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
         } __attribute__((aligned(128)));
@@ -406,22 +406,22 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     Nonce* nonce = new Nonce(package->header.nonce);
 
     /* If all is OK, save the current peer */
-    /* TODO: check this */
     {
         Peers::Details details {
             .nonce = nonce,
             .endpoint = from,
             .last_handshake_timestamp = Time::Now(),
             .from_sequence_number = 0,
+            .from_sequence_bitmask = 0,
             .to_sequence_number = 0
         };
-        std::unique_lock details_lock(Peers::details_mutex);
         memcpy(details.static_public_key,
                package->data.static_public_key,
                crypto_scalarmult_BYTES);
         memcpy(details.key,
                chain_key,
                crypto_aead_chacha20poly1305_ietf_KEYBYTES);
+        std::unique_lock details_lock(Peers::details_mutex);
         Peers::details->Put(response_ip, std::move(details));
     }
 

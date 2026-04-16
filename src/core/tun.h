@@ -329,6 +329,19 @@ FORCE_INLINE void TUN::Up() noexcept {
         System::Exec(command);
 }
 
+FORCE_INLINE void TUN::Down() noexcept {
+    /* Exec pre down commands */
+    for (const String& command : Config::Interface::pre_down)
+        System::Exec(command);
+
+    /* TODO: implement this */
+    _is_up = false;
+
+    /* Exec post down commands */
+    for (const String& command : Config::Interface::post_down)
+        System::Exec(command);
+}
+
 FORCE_INLINE int32_t TUN::Read(char* const buffer, const uint32_t buffer_size)
 const noexcept {
 #if LOG_LEVEL == 0
@@ -349,10 +362,5 @@ FORCE_INLINE void TUN::Write(const char* const buffer,
     write(_tun_fd, buffer, buffer_size);
 }
 #endif
-
-FORCE_INLINE void TUN::Down() noexcept {
-    /* TODO: implement this */
-    _is_up = false;
-}
 
 FORCE_INLINE bool TUN::IsUp() const noexcept { return _is_up; }

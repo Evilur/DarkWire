@@ -1228,9 +1228,29 @@ void Client::SendP2PHandshakeRequest(const uint32_t peer_ip,
                                      const bool nat_probe) {
     /* Try to get the temp peer details */
     std::unique_lock temp_details_lock(Peers::temp_details_mutex);
-    Peers::TempDetails* const peer_temp_details =
+    Peers::TempDetails* peer_temp_details =
         Peers::temp_details->Get(peer_ip);
-    if (peer_temp_details == nullptr) return; //TODO: Try to get permanent one
+    if (peer_temp_details == nullptr) {
+        /* Try to get the permanent details */
+        std::shared_lock details_lock(Peers::details_mutex);
+        Peers::Details* const peer_details = Peers::details->Get(peer_ip);
+        if (peer_details == nullptr) {
+            WARN_LOG("Can't send the handshake request: "
+                     "not enough information about the peer");
+            return;
+        }
+
+        /* Assemble the new temp details and put to the dictionary */
+        Peers::temp_details->Put(peer_ip, {
+            .nonce = nullptr,
+            .ephemeral_keys = nullptr,
+            .endpoint = peer_details->endpoint,
+            .waiting_get_peer = false,
+            .waiting_handshake_response = true,
+            .waiting_nat_probe = false
+        });
+        peer_temp_details = Peers::temp_details->Get(peer_ip);
+    }
 
     /* If we already are waiting for the response */
     if (peer_temp_details->waiting_handshake_response) return;
@@ -1309,7 +1329,8 @@ void Client::SendP2PHandshakeRequest(const uint32_t peer_ip,
         temp_details_lock.lock();
     }
 
-    /* TODO: Remove temporary entry if there is no response */
+    /* Remove temporary entry if there is no response */
+    Peers::temp_details->Delete(peer_ip);
 }
 
 FORCE_INLINE void Client::NatProbe(const uint32_t peer_ip,
