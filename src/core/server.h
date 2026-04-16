@@ -449,9 +449,9 @@ FORCE_INLINE void Server::HandleHandshakeRequest(
     }
 
     /* Send the response */
-    INFO_LOG("Sending a handshake response to the %s:%hhu",
+    INFO_LOG("Sending a handshake response to the %s:%hu",
              NetAddr::ToStr(from.sin_addr.s_addr).CStr(),
-             ntohl(from.sin_port));
+             ntohs(from.sin_port));
     main_socket.Send((char*)(void*)&response,
                      sizeof(HandshakeResponse),
                      from);
