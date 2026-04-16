@@ -26,6 +26,8 @@ public:
 
     static void Sleep(uint64_t seconds) noexcept;
 
+    static void NanoSleep(uint64_t nanoseconds) noexcept;
+
     static void WaitUntil(uint64_t timestamp) noexcept;
 
 private:
@@ -59,6 +61,19 @@ FORCE_INLINE void Time::Sleep(const uint64_t seconds) noexcept {
     const timespec timeseconds = {
         .tv_sec = time_t(seconds),
         .tv_nsec = 0L
+    };
+    nanosleep(&timeseconds, nullptr);
+#endif
+}
+
+FORCE_INLINE void Time::NanoSleep(const uint64_t nanoseconds) noexcept {
+#ifdef _WIN32
+    std::this_thread::sleep_for(std::chrono::nanoseconds(nanoseconds));
+#else
+    const uint64_t seconds = nanoseconds / 1'000'000'000ULL;
+    const timespec timeseconds = {
+        .tv_sec = time_t(seconds),
+        .tv_nsec = int64_t(nanoseconds - seconds)
     };
     nanosleep(&timeseconds, nullptr);
 #endif

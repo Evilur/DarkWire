@@ -1123,23 +1123,14 @@ FORCE_INLINE void Client::HandleNatProbeResponse(
     std::unique_lock temp_details_lock(Peers::temp_details_mutex);
     Peers::TempDetails* const peer_temp_details =
         Peers::temp_details->Get(peer_ip);
-    if (peer_temp_details == nullptr) {
-        TRACE_LOG("Failed to handle the nat probe response from the %s peer: "
-                  "have not enough infomation",
-                  NetAddr::ToStr(peer_ip).CStr());
-        return;
-    }
+    if (peer_temp_details == nullptr) return;
 
     /* Try to get the peer details */
     std::unique_lock details_lock(Peers::details_mutex);
     Peers::Details* const peer_details =
         Peers::details->Get(peer_ip);
-    if (peer_temp_details == nullptr) {
-        TRACE_LOG("Failed to handle the nat probe response from the %s peer: "
-                  "have not enough infomation",
-                  NetAddr::ToStr(peer_ip).CStr());
-        return;
-    }
+    if (peer_temp_details == nullptr) return;
+
 
     /* Check the package for duplicate */
     if (is_package_duplicate(package->header.sequence_number,
@@ -1323,16 +1314,15 @@ void Client::SendP2PHandshakeRequest(const uint32_t peer_ip,
 
 FORCE_INLINE void Client::NatProbe(const uint32_t peer_ip,
                                    const sockaddr_in real_endpoint) {
-    INFO_LOG("Start a nat probing the %s peer",
-             NetAddr::ToStr(peer_ip).CStr());
+    INFO_LOG("Start nat probing the %s peer", NetAddr::ToStr(peer_ip).CStr());
 
     /* Send: 16 ping packages
      * Every: 250 ms
      * <this peer> -> <second peer> -> <relay server> -> <this peer> */
     #pragma unroll
     for (uint8_t i = 0; i < 16; ++i) {
-        /* Wait for 1 sec */
-        Time::Sleep(1);
+        /* Wait for 250 msec */
+        Time::NanoSleep(250 * 1'000'000ULL);
 
         /* Try to get the peer details */
         std::shared_lock details_lock(Peers::details_mutex);
@@ -1343,7 +1333,7 @@ FORCE_INLINE void Client::NatProbe(const uint32_t peer_ip,
         }
 
         /* If we already found that direct channel is available */
-        if (equal(peer_details->endpoint, real_endpoint)) return;
+        if (!Peers::temp_details->Has(peer_ip)) return;
 
         /* Get the current timestamp */
         const uint64_t timestamp = Time::Now();
