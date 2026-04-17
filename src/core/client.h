@@ -1355,7 +1355,10 @@ FORCE_INLINE void Client::NatProbe(const uint32_t peer_ip,
         }
 
         /* If we already found that direct channel is available */
-        if (!Peers::temp_details->Has(peer_ip)) return;
+        {
+            std::shared_lock temp_details_lock(Peers::temp_details_mutex);
+            if (!Peers::temp_details->Has(peer_ip)) return;
+        }
 
         /* Get the current timestamp */
         const uint64_t timestamp = Time::Now();
