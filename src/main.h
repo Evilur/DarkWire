@@ -2,8 +2,8 @@
 
 #include "socket/udp_socket.h"
 #include "core/keys.h"
-#include "socket/udp_socket.h"
 #include "type/net_addr.h"
+#include "util/macro.h"
 
 #ifdef _WIN32
     #include <io.h>
@@ -35,7 +35,7 @@ inline const Keys* static_keys = nullptr;
 
 inline const UDPSocket main_socket;
 
-static inline void on_terminate();
+static FORCE_INLINE void on_terminate();
 
 [[nodiscard]] static int32_t print_help();
 
@@ -49,9 +49,9 @@ static inline void on_terminate();
 
 [[nodiscard]] static int32_t run_server();
 
-[[nodiscard]] bool is_package_duplicate(uint64_t sequence_number,
-                                        uint64_t& last_sequence_number,
-                                        uint64_t& sequence_bitmask)
-noexcept;
+[[nodiscard]] FORCE_INLINE
+bool is_package_duplicate(uint64_t sequence_number,
+                          uint64_t& newest_sequence_number,
+                          uint64_t& sequence_bitmask) noexcept;
 
-void calc_net() noexcept;
+FORCE_INLINE void calc_net() noexcept;
