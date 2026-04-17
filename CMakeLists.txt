@@ -11,7 +11,9 @@ IF (CMAKE_BUILD_TYPE STREQUAL "Debug")
     SET(CMAKE_CXX_SCAN_FOR_MODULES OFF)
     SET(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 ELSE ()
-    SET(CMAKE_CXX_FLAGS "-g0 -O2 -Winline -static \
+    SET(CMAKE_CXX_FLAGS "-g0 -O3 -static \
+        -march=native -mtune=native \
+        -fomit-frame-pointer -Winline \
         -fdiagnostics-color=always \
         -finline-functions \
         -finline-limit=99999999999999 \
@@ -21,7 +23,6 @@ ELSE ()
         --param large-stack-frame-growth=2147483647 \
         --param max-inline-insns-single=2147483647 \
         --param max-inline-insns-auto=2147483647 \
-        -march=native \
         -flto=128")
 ENDIF ()
 
