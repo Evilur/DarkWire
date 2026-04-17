@@ -439,35 +439,3 @@ static int32_t run_server() {
 
     return -1;
 }
-
-FORCE_INLINE
-bool is_package_duplicate(const uint64_t sequence_number,
-                          uint64_t& newest_sequence_number,
-                          uint64_t& sequence_bitmask) noexcept {
-    /* Newer than the newest seen packet */
-    if (sequence_number > newest_sequence_number) {
-        const uint64_t delta = sequence_number - newest_sequence_number;
-        if (delta >= 64) sequence_bitmask = 1ULL;
-        else sequence_bitmask = (sequence_bitmask << delta) | 1ULL;
-        newest_sequence_number = sequence_number;
-        return false;
-    }
-
-    /* Too old: outside the replay window */
-    const uint64_t delta = newest_sequence_number - sequence_number;
-    if (delta >= 64) return true;
-
-    /* Already seen such a package */
-    const uint64_t bit = 1ULL << delta;
-    if ((sequence_bitmask & bit) != 0) return true;
-
-    /* If this is the first time we see it */
-    sequence_bitmask |= bit;
-    return false;
-}
-
-FORCE_INLINE void calc_net() noexcept {
-    binmask.SetHostb((netmask == 0) ? 0x0U : (~0U << (32U - netmask)));
-    network_prefix.SetHostb(local_ip.Hostb() & binmask.Hostb());
-    broadcast.SetHostb(network_prefix.Hostb() | ~binmask.Hostb());
-}

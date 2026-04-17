@@ -506,6 +506,7 @@ FORCE_INLINE void Client::HandleHandshakeResponse(
     local_ip.SetNetb(package->data.local_ip);
     netmask = package->data.netmask;
     calc_net();
+    printf("\033[32mYour local IP address: %s\n", local_ip.ToStr().CStr());
 
     /* Allocate the memory for the peers and for the server peer */
     delete Peers::details;
