@@ -21,7 +21,7 @@ struct GetPeerRequest final {
     uint8_t poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
     GetPeerRequest(Nonce* nonce,
-                   int64_t sequnece_number,
+                   uint64_t sequnece_number,
                    uint32_t peer_ip) noexcept;
 };
 #pragma pack(pop)
@@ -29,7 +29,7 @@ struct GetPeerRequest final {
 static_assert(sizeof(GetPeerRequest) == 45, "Invalid struct packing");
 
 FORCE_INLINE GetPeerRequest::GetPeerRequest(Nonce* const nonce,
-                                            const int64_t sequnece_number,
+                                            const uint64_t sequnece_number,
                                             const uint32_t peer_ip) noexcept {
     /* Set the package type */
     header.type = GET_PEER_REQUEST;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "util/class.h"
+#include "util/logger.h"
 #include "util/macro.h"
 
 #include <cstdio>
@@ -19,6 +20,8 @@ public:
 };
 
 FORCE_INLINE void System::Exec(const char* const command) {
+#if LOG_LEVEL == 0
     printf("\033[0m[#] %s\n", command);
+#endif
     system(command);
 }
