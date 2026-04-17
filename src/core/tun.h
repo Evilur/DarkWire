@@ -243,6 +243,19 @@ FORCE_INLINE void TUN::Up() noexcept {
         System::Exec(command);
 }
 
+FORCE_INLINE void TUN::Down() noexcept {
+    /* Exec pre down commands */
+    for (const String& command : Config::Interface::pre_down)
+        System::Exec(command);
+
+    /* TODO: implement this */
+    _is_up = false;
+
+    /* Exec post down commands */
+    for (const String& command : Config::Interface::post_down)
+        System::Exec(command);
+}
+
 FORCE_INLINE WINTUN_SESSION_HANDLE TUN::Session() const {
     return _session;
 }
