@@ -54,6 +54,7 @@ private:
         struct Details final {
             UniqPtr<Nonce> nonce;
             sockaddr_in endpoint;
+            sockaddr_in real_endpoint;
             uint64_t last_to_package_timestamp;
             uint64_t last_handshake_timestamp;
             uint64_t next_handshake_timestamp;
@@ -70,9 +71,8 @@ private:
             sockaddr_in endpoint;
             uint8_t public_key[crypto_scalarmult_BYTES];
             uint8_t chain_key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
-            bool waiting_get_peer;
-            bool waiting_handshake_response;
-            bool waiting_nat_probe;
+            bool waiting_for_get_peer_response;
+            bool waiting_for_handshake_response;
         } __attribute__((aligned(128)));
 
         static inline Dictionary<uint32_t, Details, uint32_t>*
@@ -134,9 +134,10 @@ private:
 
     static void GetPeerFromServer(uint32_t peer_ip) noexcept;
 
-    static void SendP2PHandshakeRequest(uint32_t peer_ip, bool nat_probe);
+    static void SendP2PHandshakeRequest(uint32_t peer_ip,
+                                        bool need_to_probe_nat);
 
-    static void NatProbe(uint32_t peer_ip, sockaddr_in real_endpoint);
+    static void NatProbe(uint32_t peer_ip);
 };
 
 FORCE_INLINE void Client::Init() {
@@ -178,7 +179,7 @@ FORCE_INLINE void Client::RunHandshakeLoop() {
             Peers::TempDetails new_details = {
                 .nonce = new Nonce(),
                 .ephemeral_keys = new Keys(),
-                .waiting_handshake_response = true
+                .waiting_for_handshake_response = true
             };
             memcpy(new_details.public_key,
                    Server::public_key,
@@ -676,8 +677,8 @@ FORCE_INLINE void Client::HandleGetPeerResponse(
             .nonce = nullptr,
             .ephemeral_keys = nullptr,
             .endpoint = new_endpoint,
-            .waiting_get_peer = false,
-            .waiting_handshake_response = false
+            .waiting_for_get_peer_response = false,
+            .waiting_for_handshake_response = false
         };
         memcpy(new_details.public_key,
                package->data.public_key,
@@ -687,7 +688,7 @@ FORCE_INLINE void Client::HandleGetPeerResponse(
     } else {
         /* Update fields */
         peer_temp_details->endpoint = new_endpoint;
-        peer_temp_details->waiting_get_peer = false;
+        peer_temp_details->waiting_for_get_peer_response = false;
         memcpy(peer_temp_details->public_key,
                package->data.public_key,
                crypto_scalarmult_BYTES);
@@ -778,8 +779,10 @@ FORCE_INLINE void Client::HandleP2PHandshakeRequest(
     }
 
     /* Save the current peer */
+    bool need_to_probe_nat = false;
     if (peer_details == nullptr) {
         /* If we have not enough information about the peer */
+        need_to_probe_nat = true;
         if (peer_temp_details == nullptr) {
             WARN_LOG("Can't save peer: "
                      "Have not enough info");
@@ -789,7 +792,8 @@ FORCE_INLINE void Client::HandleP2PHandshakeRequest(
         /* If all is OK */
         Peers::details->Put(peer_ip, {
             .nonce = new Nonce(package->header.nonce),
-            .endpoint = peer_temp_details->endpoint,
+            .endpoint = Server::endpoint,
+            .real_endpoint = peer_temp_details->endpoint,
             .last_handshake_timestamp = package_timestamp,
             .from_sequence_number = 0,
             .to_sequence_number = 0
@@ -803,7 +807,12 @@ FORCE_INLINE void Client::HandleP2PHandshakeRequest(
     /* If we already have the peer details, just update them */
     } else {
         if (peer_temp_details != nullptr) {
-            peer_details->endpoint = peer_temp_details->endpoint;
+            if (!equal(peer_details->real_endpoint,
+                       peer_temp_details->endpoint)) {
+                peer_details->endpoint = Server::endpoint;
+                peer_details->real_endpoint = peer_temp_details->endpoint;
+                need_to_probe_nat = true;
+            }
             memcpy(peer_details->public_key,
                    peer_temp_details->public_key,
                    crypto_scalarmult_BYTES);
@@ -846,8 +855,7 @@ FORCE_INLINE void Client::HandleP2PHandshakeRequest(
     P2PHandshakeResponse response(peer_details->nonce,
                                   ephemeral_keys.Public(),
                                   timestamp,
-                                  peer_ip,
-                                  package->header.nat_probe);
+                                  peer_ip);
 
     /* Sign the response package */
     {
@@ -866,27 +874,19 @@ FORCE_INLINE void Client::HandleP2PHandshakeRequest(
     }
 
     /* Send the encrypted package */
-    INFO_LOG("Sending the handshake resposne to %s peer%s",
+    INFO_LOG("Sending the handshake response to %s peer%s",
              NetAddr::ToStr(peer_ip).CStr(),
-             package->header.nat_probe ?
-             " via the server" : "");
+             need_to_probe_nat ? " via the server" : "");
     main_socket.Send((char*)(void*)&response,
                      sizeof(response),
-                     package->header.nat_probe ?
+                     need_to_probe_nat ?
                      Server::endpoint : peer_details->endpoint);
 
-    /* If we need to probe the nat type */
-    if (package->header.nat_probe) {
-        /* Save the real endpoint */
-        const sockaddr_in real_endpoint = peer_details->endpoint;
-
-        /* Temporary send all the data throught the relay */
-        peer_details->endpoint = Server::endpoint;
-
-        /* Start the nat probing */
-        std::thread(NatProbe, peer_ip, real_endpoint).detach();
     /* Remove the temporary entry */
-    } else Peers::temp_details->Delete(peer_ip);
+    Peers::temp_details->Delete(peer_ip);
+
+    /* If we need to probe the nat */
+    if (need_to_probe_nat) std::thread(NatProbe, peer_ip).detach();
 }
 
 FORCE_INLINE void Client::HandleP2PHandshakeResponse(
@@ -976,28 +976,34 @@ FORCE_INLINE void Client::HandleP2PHandshakeResponse(
     }
 
     /* Save the peer to the permanent details dict */
+    bool need_to_probe_nat = false;
     if (peer_details == nullptr) {
-        Peers::Details new_details = {
+        need_to_probe_nat = true;
+        Peers::details->Put(peer_ip, {
             .nonce = peer_temp_details->nonce.Get(),
-            .endpoint = peer_temp_details->endpoint,
+            .endpoint = Server::endpoint,
+            .real_endpoint = peer_temp_details->endpoint,
             .last_handshake_timestamp = package_timestamp,
             .next_handshake_timestamp = timestamp + 180,
             .from_sequence_number = 0,
             .to_sequence_number = 0
-        };
-        memcpy(new_details.key,
+        });
+        peer_details = Peers::details->Get(peer_ip);
+        memcpy(peer_details->key,
                chain_key,
                crypto_aead_chacha20poly1305_ietf_KEYBYTES);
-        memcpy(new_details.public_key,
+        memcpy(peer_details->public_key,
                peer_temp_details->public_key,
                crypto_scalarmult_BYTES);
-        Peers::details->Put(peer_ip, std::move(new_details));
-        peer_details = Peers::details->Get(peer_ip);
     /* If it is already exists, just update the fields */
     } else {
+        need_to_probe_nat = !equal(peer_details->real_endpoint,
+                                   peer_temp_details->endpoint);
         *peer_details = {
             .nonce = peer_temp_details->nonce.Get(),
-            .endpoint = peer_temp_details->endpoint,
+            .endpoint = need_to_probe_nat ?
+                        Server::endpoint : peer_temp_details->endpoint,
+            .real_endpoint = peer_temp_details->endpoint,
             .last_handshake_timestamp = package_timestamp,
             .next_handshake_timestamp = timestamp + 180,
             .from_sequence_number = 0,
@@ -1014,21 +1020,13 @@ FORCE_INLINE void Client::HandleP2PHandshakeResponse(
     /* Release the old nonce */
     peer_temp_details->nonce.Release();
 
+    /* Remove the temporary entry */
+    Peers::temp_details->Delete(peer_ip);
+
+    /* If we need to probe the nat */
+    if (need_to_probe_nat) std::thread(NatProbe, peer_ip).detach();
     INFO_LOG("The handshake from the %s peer has been successfully handled",
              NetAddr::ToStr(peer_ip).CStr());
-
-    /* If we need to probe the nat type */
-    if (package->header.nat_probe) {
-        /* Save the real endpoint */
-        const sockaddr_in real_endpoint = peer_details->endpoint;
-
-        /* Temporary send all the data throught the relay */
-        peer_details->endpoint = Server::endpoint;
-
-        /* Start the nat probing */
-        std::thread(NatProbe, peer_ip, real_endpoint).detach();
-    /* Remove the temp entry */
-    } else Peers::temp_details->Delete(peer_ip);
 }
 
 FORCE_INLINE void Client::HandleNatProbeRequest(
@@ -1120,18 +1118,12 @@ FORCE_INLINE void Client::HandleNatProbeResponse(
     /* Get the peer ip from the package */
     const uint32_t peer_ip = package->header.source_ip;
 
-    /* Try to get the peer temp details */
-    std::unique_lock temp_details_lock(Peers::temp_details_mutex);
-    Peers::TempDetails* const peer_temp_details =
-        Peers::temp_details->Get(peer_ip);
-    if (peer_temp_details == nullptr) return;
-
     /* Try to get the peer details */
     std::unique_lock details_lock(Peers::details_mutex);
     Peers::Details* const peer_details =
         Peers::details->Get(peer_ip);
-    if (peer_temp_details == nullptr) return;
-
+    if (peer_details == nullptr ||
+        equal(peer_details->real_endpoint, peer_details->endpoint)) return;
 
     /* Check the package for duplicate */
     if (is_package_duplicate(package->header.sequence_number,
@@ -1161,12 +1153,9 @@ FORCE_INLINE void Client::HandleNatProbeResponse(
     }
 
     /* If all is OK, update the endpoint in the permanent details */
-    peer_details->endpoint = peer_temp_details->endpoint;
-
-    /* Remove the temporary entry */
-    Peers::temp_details->Delete(peer_ip);
     INFO_LOG("Direct channel to the %s peer is available",
              NetAddr::ToStr(peer_ip).CStr());
+    peer_details->endpoint = peer_details->real_endpoint;
 }
 
 FORCE_INLINE void Client::GetPeerFromServer(const uint32_t peer_ip)
@@ -1174,7 +1163,7 @@ noexcept {
     /* Now we are waiting for the peer */
     {
         std::unique_lock temp_details_lock(Peers::temp_details_mutex);
-        Peers::temp_details->Put(peer_ip, { .waiting_get_peer = true });
+        Peers::temp_details->Put(peer_ip, { .waiting_for_get_peer_response = true });
     }
 
     std::shared_lock temp_details_lock(Peers::temp_details_mutex);
@@ -1221,12 +1210,12 @@ noexcept {
         peer_temp_details = Peers::temp_details->Get(peer_ip);
     /* While we have not got the response */
     } while (peer_temp_details != nullptr &&
-             peer_temp_details->waiting_get_peer);
+             peer_temp_details->waiting_for_get_peer_response);
 }
 
 FORCE_INLINE
 void Client::SendP2PHandshakeRequest(const uint32_t peer_ip,
-                                     const bool nat_probe) {
+                                     const bool need_to_probe_nat) {
     /* Try to get the temp peer details */
     std::unique_lock temp_details_lock(Peers::temp_details_mutex);
     Peers::TempDetails* peer_temp_details =
@@ -1246,25 +1235,20 @@ void Client::SendP2PHandshakeRequest(const uint32_t peer_ip,
             .nonce = nullptr,
             .ephemeral_keys = nullptr,
             .endpoint = peer_details->endpoint,
-            .waiting_get_peer = false,
-            .waiting_handshake_response = true,
-            .waiting_nat_probe = false
+            .waiting_for_get_peer_response = false,
+            .waiting_for_handshake_response = true
         });
         peer_temp_details = Peers::temp_details->Get(peer_ip);
     }
 
     /* If we already are waiting for the response */
-    if (peer_temp_details->waiting_handshake_response) return;
-    peer_temp_details->waiting_handshake_response = true;
+    if (peer_temp_details->waiting_for_handshake_response) return;
+    peer_temp_details->waiting_for_handshake_response = true;
 
     /* Maximum: 8 attemps
      * Every: 6 seconds
      * Check for response every iteration */
     for (uint8_t i = 0; i < 8 && Peers::temp_details->Has(peer_ip); i++) {
-        INFO_LOG("Sending a handshake request to the %s peer%s",
-                 NetAddr::ToStr(peer_ip).CStr(),
-                 nat_probe ? " via the server" : "");
-
         /* Get the current timestamp */
         const uint64_t timestamp = Time::Now();
 
@@ -1285,8 +1269,7 @@ void Client::SendP2PHandshakeRequest(const uint32_t peer_ip,
         P2PHandshakeRequest package(nonce,
                                     ephemeral_keys->Public(),
                                     timestamp,
-                                    peer_ip,
-                                    nat_probe);
+                                    peer_ip);
 
         /* Compute the first shared secret */
         uint8_t shared[crypto_scalarmult_BYTES];
@@ -1317,12 +1300,14 @@ void Client::SendP2PHandshakeRequest(const uint32_t peer_ip,
             );
         }
 
-        /* Get the endpoint */
-        sockaddr_in endpoint =
-            nat_probe ? Server::endpoint : peer_temp_details->endpoint;
-
         /* Send the signed handshake request package */
-        main_socket.Send((char*)(void*)&package, sizeof(package), endpoint);
+        INFO_LOG("Sending the handshake request to the %s peer%s",
+                 NetAddr::ToStr(peer_ip).CStr(),
+                 need_to_probe_nat ? " via the server" : "");
+        main_socket.Send((char*)(void*)&package,
+                         sizeof(package),
+                         need_to_probe_nat ?
+                         Server::endpoint : peer_temp_details->endpoint);
 
         /* Wait for 6 seconds */
         temp_details_lock.unlock();
@@ -1334,8 +1319,7 @@ void Client::SendP2PHandshakeRequest(const uint32_t peer_ip,
     Peers::temp_details->Delete(peer_ip);
 }
 
-FORCE_INLINE void Client::NatProbe(const uint32_t peer_ip,
-                                   const sockaddr_in real_endpoint) {
+FORCE_INLINE void Client::NatProbe(const uint32_t peer_ip) {
     INFO_LOG("Start nat probing the %s peer", NetAddr::ToStr(peer_ip).CStr());
 
     /* Send: 16 ping packages
@@ -1349,16 +1333,10 @@ FORCE_INLINE void Client::NatProbe(const uint32_t peer_ip,
         /* Try to get the peer details */
         std::shared_lock details_lock(Peers::details_mutex);
         Peers::Details* const peer_details = Peers::details->Get(peer_ip);
-        if (peer_details == nullptr) {
-            WARN_LOG("Not enough info for the nat probing");
-            return;
-        }
+        if (peer_details == nullptr) return;
 
-        /* If we already found that direct channel is available */
-        {
-            std::shared_lock temp_details_lock(Peers::temp_details_mutex);
-            if (!Peers::temp_details->Has(peer_ip)) return;
-        }
+        /* If we already found that the direct channel is available */
+        if (equal(peer_details->endpoint, peer_details->real_endpoint)) return;
 
         /* Get the current timestamp */
         const uint64_t timestamp = Time::Now();
@@ -1391,7 +1369,7 @@ FORCE_INLINE void Client::NatProbe(const uint32_t peer_ip,
                   NetAddr::ToStr(peer_ip).CStr());
         main_socket.Send((char*)(void*)&package,
                          sizeof(package),
-                         real_endpoint);
+                         peer_details->real_endpoint);
     }
 
     /* Wait for 6 seconds */

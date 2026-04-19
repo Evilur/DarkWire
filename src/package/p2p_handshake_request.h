@@ -16,27 +16,24 @@ struct P2PHandshakeRequest final {
         uint64_t timestamp;
         uint32_t source_ip;
         uint32_t destination_ip;
-        bool nat_probe;
     } header;
     uint8_t poly1305_tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
 
     explicit P2PHandshakeRequest(Nonce* nonce,
                                  const uint8_t* ephemeral_public_key,
                                  uint64_t timestamp,
-                                 uint32_t destination_ip,
-                                 bool nat_probe) noexcept;
+                                 uint32_t destination_ip) noexcept;
 };
 #pragma pack(pop)
 
-static_assert(sizeof(P2PHandshakeRequest) == 78, "Invalid struct packing");
+static_assert(sizeof(P2PHandshakeRequest) == 77, "Invalid struct packing");
 
 FORCE_INLINE
 P2PHandshakeRequest::P2PHandshakeRequest(
     Nonce* const nonce,
     const uint8_t* const ephemeral_public_key,
     const uint64_t timestamp,
-    const uint32_t destination_ip,
-    const bool nat_probe
+    const uint32_t destination_ip
 ) noexcept {
     /* Set the package type */
     header.type = P2P_HANDSHAKE_REQUEST;
@@ -57,7 +54,4 @@ P2PHandshakeRequest::P2PHandshakeRequest(
 
     /* Set the destination ip */
     header.destination_ip = destination_ip;
-
-    /* Set nat probe */
-    header.nat_probe = nat_probe;
 }
