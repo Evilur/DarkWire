@@ -906,7 +906,16 @@ FORCE_INLINE void Client::HandleP2PHandshakeResponse(
     std::unique_lock temp_details_lock(Peers::temp_details_mutex);
     Peers::TempDetails* const peer_temp_details =
         Peers::temp_details->Get(peer_ip);
-    if (peer_temp_details == nullptr) return;
+    if (peer_temp_details == nullptr) {
+        WARN_LOG("Failed to handle the handshake response: "
+                 "no enough infomation");
+        return;
+    }
+    if (!peer_temp_details->waiting_for_handshake_response) {
+        WARN_LOG("Failed to handle the handshake response: "
+                 "unexpected package");
+        return;
+    }
 
     /* Try to get permanent details */
     std::unique_lock details_lock(Peers::details_mutex);
@@ -1163,7 +1172,13 @@ noexcept {
     /* Now we are waiting for the peer */
     {
         std::unique_lock temp_details_lock(Peers::temp_details_mutex);
-        Peers::temp_details->Put(peer_ip, { .waiting_for_get_peer_response = true });
+        if (!Peers::temp_details->Put(peer_ip, {
+            .waiting_for_get_peer_response = true
+        })) {
+            INFO_LOG("No need to get the peer from the server: "
+                     "there is already such a temp details");
+            return;
+        }
     }
 
     std::shared_lock temp_details_lock(Peers::temp_details_mutex);
@@ -1211,6 +1226,15 @@ noexcept {
     /* While we have not got the response */
     } while (peer_temp_details != nullptr &&
              peer_temp_details->waiting_for_get_peer_response);
+
+    /* If there is no answer from the server */
+    temp_details_lock.unlock();
+    Time::Sleep(6);
+    std::unique_lock temp_details_uniq_lock(Peers::temp_details_mutex);
+    peer_temp_details = Peers::temp_details->Get(peer_ip);
+    if (peer_temp_details != nullptr &&
+        peer_temp_details->waiting_for_get_peer_response)
+        Peers::temp_details->Delete(peer_ip);
 }
 
 FORCE_INLINE
@@ -1248,7 +1272,11 @@ void Client::SendP2PHandshakeRequest(const uint32_t peer_ip,
     /* Maximum: 8 attemps
      * Every: 6 seconds
      * Check for response every iteration */
-    for (uint8_t i = 0; i < 8 && Peers::temp_details->Has(peer_ip); i++) {
+    for (uint8_t i = 0;
+         i < 8 &&
+         peer_temp_details != nullptr &&
+         peer_temp_details->waiting_for_handshake_response;
+         i++) {
         /* Get the current timestamp */
         const uint64_t timestamp = Time::Now();
 
@@ -1312,11 +1340,20 @@ void Client::SendP2PHandshakeRequest(const uint32_t peer_ip,
         /* Wait for 6 seconds */
         temp_details_lock.unlock();
         Time::Sleep(6);
+
+        /* Get the peer from the dict */
         temp_details_lock.lock();
+        peer_temp_details = Peers::temp_details->Get(peer_ip);
     }
 
     /* Remove temporary entry if there is no response */
-    Peers::temp_details->Delete(peer_ip);
+    temp_details_lock.unlock();
+    Time::Sleep(6);
+    std::unique_lock temp_details_uniq_lock(Peers::temp_details_mutex);
+    peer_temp_details = Peers::temp_details->Get(peer_ip);
+    if (peer_temp_details != nullptr &&
+        peer_temp_details->waiting_for_handshake_response)
+            Peers::temp_details->Delete(peer_ip);
 }
 
 FORCE_INLINE void Client::NatProbe(const uint32_t peer_ip) {
