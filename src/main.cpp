@@ -410,7 +410,7 @@ static int32_t run_client() {
 
     /* Save the handshake every 6 seconds until get the response,
      * and every 3 minutes at all */
-    std::thread(Client::RunHandshakeLoop).detach();
+    std::thread(Client::SendHandshakeRequest).detach();
 
     /* Send keepalive every 30 seconds */
     std::thread(Client::RunKeepAliveLoop).detach();

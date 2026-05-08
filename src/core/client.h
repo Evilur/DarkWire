@@ -39,7 +39,7 @@ public:
 
     static void Init();
 
-    static void RunHandshakeLoop();
+    static void SendHandshakeRequest();
 
     static void RunHandlePackagesLoop() noexcept;
 
@@ -89,6 +89,8 @@ private:
         static inline uint32_t local_ip;
         static inline uint8_t public_key[crypto_scalarmult_BYTES];
     };
+
+    static constexpr int RETRY_TIME = 6;
 
     static void HandleHandshakeResponse(
         HandshakeResponse* package,
@@ -162,7 +164,7 @@ FORCE_INLINE void Client::Init() {
         new Dictionary<uint32_t, Peers::TempDetails, uint8_t>(16);
 }
 
-FORCE_INLINE void Client::RunHandshakeLoop() {
+FORCE_INLINE void Client::SendHandshakeRequest() {
     /* Get the shared temp details lock */
     std::shared_lock temp_shared_details_lock(Peers::temp_details_mutex);
 
@@ -232,9 +234,9 @@ FORCE_INLINE void Client::RunHandshakeLoop() {
                          sizeof(HandshakeRequest),
                          Server::endpoint);
 
-        /* Wait for 6 seconds */
+        /* Wait for RETRY_TIME seconds */
         temp_uniq_details_lock.unlock();
-        Time::Sleep(6);
+        Time::Sleep(RETRY_TIME);
         temp_shared_details_lock.lock();
     } while (Peers::temp_details->Has(INADDR_ANY));
 }
@@ -338,7 +340,7 @@ FORCE_INLINE void Client::RunKeepAliveLoop() noexcept {
         /* Get the server's details */
         std::shared_lock details_lock(Peers::details_mutex);
         if (Server::details == nullptr) {
-            next_keepalive_timestamp = timestamp + 6;
+            next_keepalive_timestamp = timestamp + RETRY_TIME;
             continue;
         }
 
@@ -1188,7 +1190,7 @@ noexcept {
 
         /* Assemble the response package */
         std::shared_lock details_lock(Peers::details_mutex);
-        if (Server::details == nullptr) { Time::Sleep(6); continue; }
+        if (Server::details == nullptr) { Time::Sleep(RETRY_TIME); continue; }
         GetPeerRequest package(Server::details->nonce,
                                Server::details->to_sequence_number++,
                                peer_ip);
@@ -1216,9 +1218,9 @@ noexcept {
                          sizeof(package),
                          Server::endpoint);
 
-        /* Wait for 6 seconds */
+        /* Wait for RETRY_TIME seconds */
         details_lock.unlock();
-        Time::Sleep(6);
+        Time::Sleep(RETRY_TIME);
 
         /* Get the temp details */
         temp_details_lock.lock();
@@ -1229,7 +1231,7 @@ noexcept {
 
     /* If there is no answer from the server */
     temp_details_lock.unlock();
-    Time::Sleep(6);
+    Time::Sleep(RETRY_TIME);
     std::unique_lock temp_details_uniq_lock(Peers::temp_details_mutex);
     peer_temp_details = Peers::temp_details->Get(peer_ip);
     if (peer_temp_details != nullptr &&
@@ -1270,7 +1272,7 @@ void Client::SendP2PHandshakeRequest(const uint32_t peer_ip,
     peer_temp_details->waiting_for_handshake_response = true;
 
     /* Maximum: 8 attemps
-     * Every: 6 seconds
+     * Every: RETRY_TIME seconds
      * Check for response every iteration */
     for (uint8_t i = 0;
          i < 8 &&
@@ -1337,9 +1339,9 @@ void Client::SendP2PHandshakeRequest(const uint32_t peer_ip,
                          need_to_probe_nat ?
                          Server::endpoint : peer_temp_details->endpoint);
 
-        /* Wait for 6 seconds */
+        /* Wait for RETRY_TIME seconds */
         temp_details_lock.unlock();
-        Time::Sleep(6);
+        Time::Sleep(RETRY_TIME);
 
         /* Get the peer from the dict */
         temp_details_lock.lock();
@@ -1348,7 +1350,7 @@ void Client::SendP2PHandshakeRequest(const uint32_t peer_ip,
 
     /* Remove temporary entry if there is no response */
     temp_details_lock.unlock();
-    Time::Sleep(6);
+    Time::Sleep(RETRY_TIME);
     std::unique_lock temp_details_uniq_lock(Peers::temp_details_mutex);
     peer_temp_details = Peers::temp_details->Get(peer_ip);
     if (peer_temp_details != nullptr &&
@@ -1409,8 +1411,8 @@ FORCE_INLINE void Client::NatProbe(const uint32_t peer_ip) {
                          peer_details->real_endpoint);
     }
 
-    /* Wait for 6 seconds */
-    Time::Sleep(6);
+    /* Wait for RETRY_TIME seconds */
+    Time::Sleep(RETRY_TIME);
 
     /* Try to delete the temp details entry */
     std::unique_lock temp_details_lock(Peers::temp_details_mutex);
